@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta name="robots" content="noindex">
-<script>window.AMPHION_DATEIEN={"app.js":"88cc1d84ba","bauplatz.js":"43a2842860","betrachter.js":"1629782402","bilder/plano_a.jpg":"26152ed860","bilder/plano_b.jpg":"01c641782a","bilder/render_bano_A.jpg":"035e8f038d","bilder/render_cocina_desde_comedor.jpg":"70f9f999de","bilder/render_comedor.jpg":"46f2c67deb","bilder/render_dormitorio_1.jpg":"bf7c2a0b07","bilder/render_isla_abierta.jpg":"50d804bc43","bilder/render_salon.jpg":"6bfdd0b045","bilder/render_terraza.jpg":"28d8382729","favicon.svg":"5f71fbf261","modell/monteesquinza/architektur.glb":"b75a104689","modell/monteesquinza/einbauten.glb":"4e4be40666","modell/monteesquinza/farben.json":"9bdc7cad48","modell/monteesquinza/farben_rhino.txt":"30eb7f6d86","modell/monteesquinza/hausoffen.glb":"d59dbfe888","modell/monteesquinza/hausschnitt.glb":"fe1d4b335f","modell/monteesquinza/info.json":"1a5b893c58","modell/monteesquinza/moebel.glb":"d20eb763e6","modell/monteesquinza/stadt.json":"31dc58dc7c","modell/monteesquinza/stadt3d/tileset.json":"6e9c7f661f","modell/monteesquinza/technik.glb":"bc1a523d1c","style.css":"343a10af86"}</script>
+<script>window.AMPHION_DATEIEN={"app.js":"88cc1d84ba","bauplatz.js":"43a2842860","betrachter.js":"d766a3fad4","bilder/plano_a.jpg":"26152ed860","bilder/plano_b.jpg":"01c641782a","bilder/render_bano_A.jpg":"035e8f038d","bilder/render_cocina_desde_comedor.jpg":"70f9f999de","bilder/render_comedor.jpg":"46f2c67deb","bilder/render_dormitorio_1.jpg":"bf7c2a0b07","bilder/render_isla_abierta.jpg":"50d804bc43","bilder/render_salon.jpg":"6bfdd0b045","bilder/render_terraza.jpg":"28d8382729","favicon.svg":"5f71fbf261","modell/monteesquinza/architektur.glb":"b75a104689","modell/monteesquinza/einbauten.glb":"4e4be40666","modell/monteesquinza/farben.json":"9bdc7cad48","modell/monteesquinza/farben_rhino.txt":"30eb7f6d86","modell/monteesquinza/hausoffen.glb":"82e4313363","modell/monteesquinza/hausschnitt.glb":"d58f96bfd2","modell/monteesquinza/info.json":"1a5b893c58","modell/monteesquinza/moebel.glb":"d20eb763e6","modell/monteesquinza/nachbarn.glb":"acfe34f1e4","modell/monteesquinza/stadt.json":"31dc58dc7c","modell/monteesquinza/stadt3d/tileset.json":"df450eebfe","modell/monteesquinza/technik.glb":"bc1a523d1c","style.css":"343a10af86"}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="titel">Amphion Estate · Tu vivienda, construida en 3D antes de venderla</title>
@@ -165,11 +165,11 @@
 // Modell des Betrachters (site/betrachter.js, hier kopiert): die Wohnung, Y oben, Mitte des Grundrisses im Ursprung, Fußboden bei 0
 window.AMPHION_MODELLE = {
   monteesquinza: {
-    basis: 'modell/monteesquinza/', dateien: { stadt: 'stadt3d/tileset.json', hausschnitt: 'hausschnitt.glb', hausoffen: 'hausoffen.glb', architektur: 'architektur.glb', einbauten: 'einbauten.glb', technik: 'technik.glb', moebel: 'moebel.glb' },
-    versatz: { stadt: [0, -21.3, 0], hausschnitt: [0, -21.3, 0], hausoffen: [0, -21.3, 0] }, ohneSchnittflaechen: ['stadt', 'hausschnitt', 'hausoffen'], ungeschnitten: ['stadt'], ungeschnittenBei: { planta: ['hausoffen'] }, kachelFehler: 12,   // Fotostadt als 3D-Tiles (tools/stadt_google_tiles.py), Stufen 128 m bis 2 m
+    basis: 'modell/monteesquinza/', dateien: { stadt: 'stadt3d/tileset.json', hausschnitt: 'hausschnitt.glb', hausoffen: 'hausoffen.glb', nachbarn: 'nachbarn.glb', architektur: 'architektur.glb', einbauten: 'einbauten.glb', technik: 'technik.glb', moebel: 'moebel.glb' },
+    versatz: { stadt: [0, -21.3, 0], hausschnitt: [0, -21.3, 0], hausoffen: [0, -21.3, 0] }, ohneSchnittflaechen: ['stadt', 'hausschnitt', 'hausoffen', 'nachbarn'], ungeschnitten: ['stadt'], ungeschnittenBei: { planta: ['hausoffen', 'nachbarn'] }, kachelFehler: 12,   // Fotostadt als 3D-Tiles (tools/stadt_google_tiles.py), Stufen 128 m bis 2 m
     // eigenes Haus aus der Fotostadt (tools/stadt_google_web.py haus=, hausschnitt=): näher als 150 m oder im Schnitt ohne Wohnungsgeschoss, dort unsere echte Fassade mit Fenstern (Tassilo 3.11.), Dach bleibt; weiter weg das Google-Haus aus den Kacheln
     glas: { deckung: 0.16, spiegel: 0.45 },
-    haus: { nah: 150, dach: 2.68, schnitt: 'hausschnitt', offen: 'hausoffen', wohnung: ['architektur', 'einbauten', 'technik', 'moebel'], innen: [-11.5, -0.6, -11, 11.5, 3.6, 11] },
+    haus: { nah: 150, dach: 2.68, schnitt: 'hausschnitt', offen: 'hausoffen', wohnung: ['architektur', 'einbauten', 'technik', 'moebel'], nachbarn: ['nachbarn'], innen: [-11.5, -0.6, -11, 11.5, 3.6, 11] },
     anflug: { pos: [2600, 2300, 3100], ziel: [0, -10, 0], dauer: 9, wartezeit: 2500 },
     kappen: ['architektur', 'einbauten'],
     nah: 0.05, fern: 14000, nahst: 0.4, fernst: 2500, start: 'ecke', schnittStart: 'planta',
@@ -187,6 +187,6 @@ window.AMPHION_MODELLE = {
 </script>
 <script src="app.js?v=88cc1d84ba"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","3d-tiles-renderer/three":"https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.28/build/index.three.js"}}</script>
-<script type="module" src="betrachter.js?v=1629782402"></script>
+<script type="module" src="betrachter.js?v=d766a3fad4"></script>
 </body>
 </html>
