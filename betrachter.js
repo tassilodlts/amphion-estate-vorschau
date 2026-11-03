@@ -130,7 +130,14 @@ function rundgang(m) {
   fahren(S[0].pos, S[0].ziel, 2.5, () => { i = 1; melde(S[0].name); setTimeout(weiter, 1200); });
   return true;
 }
-function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); renderer.render(scene, camera); }
+function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); kachelnNeu(); renderer.render(scene, camera); }
+// Estate (3.11., Tassilo: Dach bleibt, erst im Schnitt zeigen, was aufgeschnitten ist; unsere echten Fenster statt der Google-Fenster; weiter draußen
+// unschärfer wie Google): weit weg (über m.haus.nah Meter) nur die Fotostadt mit dem Google-Haus (Knoten „eigenhaus“ der Kacheln, m.haus.ganz);
+// nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
+function hausWahl() { const m = aktiv, h = m?.haus; if (!h) return; if (!h.geladen) { h.geladen = true; for (const k of h.wohnung) lade(k); }   // Wohnung schon beim Anflug laden, unsichtbar
+  const b = h.innen, p = camera.position; const innen = !!m.schnitt || (!!h.nah && p.length() < h.nah) || (p.x > b[0] && p.x < b[3] && p.y > b[1] && p.y < b[4] && p.z > b[2] && p.z < b[5]); if (innen === m.hausInnen) return; m.hausInnen = innen; for (const k of Object.keys(m.dateien)) zeige(k); for (const o of m.eigenhaus || []) o.visible = !innen; }
+// Schnitt nur für die Gruppen außerhalb m.ungeschnitten (Estate: die Fotostadt bleibt ganz), darum Ebenen je Material statt am Renderer
+function clipSetzen(m) { for (const [k, g] of Object.entries(m.gruppen)) { const frei = m.ungeschnitten?.includes(k); g.traverse(o => { if (o.isMesh && o.material) for (const mat of [].concat(o.material)) mat.clippingPlanes = frei || !m.ebenen?.length ? null : m.ebenen; }); } }
 function groesse() {
   const w = canvas.clientWidth, h = canvas.clientHeight; renderer.setSize(w, h, false);
   if (camera?.isOrthographicCamera) { const r = camera.userData.r, a = w / h; camera.left = -r * a; camera.right = r * a; camera.top = r; camera.bottom = -r; }
@@ -157,14 +164,35 @@ function aktiviere(name) {
   if (m.bau && !m.teile) { let g = null; try { g = JSON.parse(localStorage.getItem('amphion.bau') || 'null'); } catch { /* ohne Speicher */ } setzeBau(Array.isArray(g) && g.length ? g : BAU_START, false); }
 }
 // Sichtbar ist eine Gruppe, wenn ihr Schalter an ist; Gruppen des Zustands folgen dem Zustand
-function sollSichtbar(k) { const m = aktiv; if (m.zustaende) { const z = m.zustaende[m.zustand]; if (k in z && !z[k]) return false; } return m.sichtbar[k === 'kacheln' || k === 'fern' ? 'stadt' : k] !== false; }
+function sollSichtbar(k) { const m = aktiv; if (m.zustaende) { const z = m.zustaende[m.zustand]; if (k in z && !z[k]) return false; }
+  const h = m.haus; if (h && (k === h.ganz || k === h.schnitt)) return m.sichtbar.stadt !== false && (k === h.schnitt) === !!m.hausInnen;   // folgt dem Schalter Stadt
+  if (h && h.wohnung.includes(k) && !m.hausInnen && m.sichtbar.stadt !== false && m.sichtbar[k] !== false) return false; return m.sichtbar[k === 'kacheln' || k === 'fern' ? 'stadt' : k] !== false; }
 function zustand(z) { const m = aktiv; if (!m.zustaende?.[z]) return; m.zustand = z; for (const k of Object.keys(m.dateien)) zeige(k); }
 function zeige(k) { const m = aktiv, soll = sollSichtbar(k); if (m.gruppen[k]) m.gruppen[k].visible = soll; else if (soll) lade(k); if (m.baumNetz && m.baeume?.gruppe === k) m.baumNetz.visible = soll; }
+
+// 3D-Tiles (Estate 3.11., Tassilo: „wie Google, weiter draußen unschärfer“): eigenes tileset.json (tools/stadt_google_tiles.py, Z oben), je nach Abstand
+// lädt der TilesRenderer die passende Stufe und gibt ferne frei; alle Kacheldateien tragen den Stempel des tileset.json
+async function ladeTiles(m, k, g) {
+  const { TilesRenderer } = await import('3d-tiles-renderer/three');
+  const url = new URL(mitVersion(m.basis + m.dateien[k]), location.href), v = url.searchParams.get('v');
+  const t = new TilesRenderer(url.href), gl = new GLTFLoader(t.manager); gl.setDRACOLoader(draco); t.manager.addHandler(/\.(gltf|glb)(\?.*)?$/, gl);
+  t.errorTarget = m.kachelFehler ?? 12;
+  if (v) t.preprocessURL = u => { const x = new URL(u, location.href); if (!x.searchParams.has('v')) x.searchParams.set('v', v); return x.href; };
+  t.group.rotation.x = -Math.PI / 2; m.eigenhaus ||= new Set();
+  t.addEventListener('load-model', ({ scene: s }) => s.traverse(o => {
+    if (!o.isMesh) return; const alt = o.material; o.material = new THREE.MeshBasicMaterial({ map: alt.map, side: THREE.DoubleSide }); alt.dispose(); o.frustumCulled = false;   // Licht steckt im Foto
+    if (o.name === 'eigenhaus' || o.parent?.name === 'eigenhaus') { m.eigenhaus.add(o); o.visible = !m.hausInnen; }
+  }));
+  t.addEventListener('dispose-model', ({ scene: s }) => s.traverse(o => m.eigenhaus.delete(o)));
+  g.add(t.group); if (m.versatz?.[k]) g.position.set(...m.versatz[k]); m.tiles = t; melde('');
+}
+function kachelnNeu() { const t = aktiv?.tiles; if (!t || !t.group.parent?.visible) return; if (t.kamera !== camera) { if (t.kamera) t.deleteCamera(t.kamera); t.setCamera(camera); t.kamera = camera; } t.setResolutionFromRenderer(camera, renderer); camera.updateMatrixWorld(); t.update(); }
 
 async function lade(k) {
   const m = aktiv; if (m.gruppen[k]) return;
   const g = m.gruppen[k] = new THREE.Group(); g.visible = true; m.wurzel.add(g);
   melde('…');
+  if (/tileset\.json$/.test(m.dateien[k])) { try { await ladeTiles(m, k, g); } catch (e) { melde(fehler?.textContent || 'Fehler'); console.error(e); } return; }
   try {
     const d = await loader.loadAsync(mitVersion(m.basis + m.dateien[k]));
     const netze = []; d.scene.traverse(o => { if (o.isMesh) netze.push(o); });   // erst sammeln: die Schnittflächen kommen als Kinder dazu
@@ -180,18 +208,19 @@ async function lade(k) {
       }
       const glas = o.material.name === 'glas', solid = o.material.name === 'solid';   // solid: geschlossene Körper (tools/web_3dm_glb.mjs), nur sie bekommen Kappen
       o.material = glas
-        ? new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.04, envMap: UMGEBUNG, envMapIntensity: 1.35, transparent: true, opacity: 0.58, side: THREE.DoubleSide, depthWrite: false })   // spiegelt, leicht getönt
+        ? new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.04, envMap: UMGEBUNG, envMapIntensity: m.glas?.spiegel ?? 1.35, transparent: true, opacity: m.glas?.deckung ?? 0.58, side: THREE.DoubleSide, depthWrite: false })   // spiegelt, leicht getönt; m.glas (Estate): klarer, damit man die Stadt sieht
         : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
       o.frustumCulled = false;
       const kappenGruppe_ = m.kappen ? m.kappen.includes(k) : KAPPEN_GRUPPEN.has(k);
       if (solid && kappenGruppe_) { const s = kappenGruppe(o.geometry); s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }
       // offene Körper (Wände ohne Deckel, Böden als Fläche) in denselben Gruppen: im Schnitt nur Vorderseiten, Rückseiten dunkel, so wirkt
       // auch ein offener Wandkasten massiv; ohne Schnitt wieder beidseitig, damit nichts durchsichtig wird
-      if (!glas && !kappenGruppe_ && !m.ohneSchnittflaechen?.includes(k)) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!renderer.clippingPlanes.length; o.add(s); m.schnittflaechen.push(s); }   // wie bisher (Hochhaus: rote Tragwerksflächen in der Strukturansicht)
+      if (!glas && !kappenGruppe_ && !m.ohneSchnittflaechen?.includes(k)) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }   // wie bisher (Hochhaus: rote Tragwerksflächen in der Strukturansicht)
       if (!glas && kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
     }
     g.add(d.scene); g.visible = m === aktiv ? sollSichtbar(k) : true;
     if (m.versatz?.[k]) g.position.set(...m.versatz[k]);   // z. B. Stadt: Straßenniveau unter dem Wohnungsgeschoss
+    if (m.ebenen?.length) clipSetzen(m);   // nachgeladene Gruppe in den laufenden Schnitt
     if (m === aktiv && m.schnitt) strukturAnsicht(true); if (status?.textContent === '…') melde('');   // nachgeladene Gruppe in die laufende Strukturansicht
   } catch (e) { melde(fehler?.textContent || 'Fehler'); console.error(e); }
 }
@@ -242,7 +271,7 @@ function strukturAnsicht(an) {
     if (k !== 'gebaeude' && k !== 'pflanzen') continue;
     g.traverse(o => {
       if (!o.isMesh) return;
-      if (o.material === SCHNITT) { o.userData.kappe = true; o.visible = !an && !!renderer.clippingPlanes.length; return; }
+      if (o.material === SCHNITT) { o.userData.kappe = true; o.visible = !an && !!aktiv?.schnitt; return; }
       const mat = o.material, u = mat.userData; if (!u.orig) u.orig = { transparent: mat.transparent, opacity: mat.opacity, depthWrite: mat.depthWrite };
       if (an) Object.assign(mat, { transparent: true, opacity: Math.min(u.orig.opacity, 0.13), depthWrite: false }); else Object.assign(mat, u.orig);
       mat.needsUpdate = true;
@@ -254,7 +283,7 @@ window.formaKappen = an => { if (an === undefined) { const m = aktiv; return { s
 function schnitt(name) {
   const m = aktiv, s = m.schnitte[name]; if (name !== 'kein' && !s) return false; m.schnitt = s ? name : null;
   const ebene = s ? new THREE.Plane(new THREE.Vector3(s[0], s[1], s[2]), s[3]) : null;
-  renderer.clippingPlanes = ebene ? [ebene] : [];
+  m.ebenen = ebene ? [ebene] : []; renderer.clippingPlanes = []; renderer.localClippingEnabled = true; clipSetzen(m);
   for (const mm of Object.values(MODELLE)) for (const f of mm.schnittflaechen || []) f.visible = !!s;
   for (const mat of m.schnittMats || []) { mat.side = s ? THREE.FrontSide : THREE.DoubleSide; mat.needsUpdate = true; }
   // Kappenebene: groß genug für das ganze Modell, liegt genau in der Schnittebene, schaut zur sichtbaren Seite; löscht danach den Stencil
@@ -309,7 +338,7 @@ function tun(a) {
   if (a.rundgang) return rundgang(m) ? (T.rundgangStart || '') : T.unklar;
   if (a.alles) { fahrtAbbrechen(); m.zustand = '2026'; for (const k of Object.keys(m.dateien)) m.sichtbar[k] = true; axo = false; blick(m.start); schnitt(m.schnittStart || 'kein'); for (const k of Object.keys(m.dateien)) zeige(k); return T.alles; }
   if (a.zustand && m.zustaende?.[String(a.zustand)]) { zustand(String(a.zustand)); gesagt.push(T.zustand[a.zustand]); }
-  if (a.gruppen) { const an = [], aus = []; for (const [k, v] of Object.entries(a.gruppen)) { if (!(k in m.dateien) || k === 'kacheln' || k === 'fern') continue; m.sichtbar[k] = !!v; zeige(k); if (k === 'stadt') { if (m.dateien.kacheln) zeige('kacheln'); if (m.dateien.fern) zeige('fern'); } (v ? an : aus).push(T.gruppen[k] || k); }
+  if (a.gruppen) { const an = [], aus = []; for (const [k, v] of Object.entries(a.gruppen)) { if (!(k in m.dateien) || k === 'kacheln' || k === 'fern') continue; m.sichtbar[k] = !!v; zeige(k); if (k === 'stadt') for (const kk of Object.keys(m.dateien)) zeige(kk); (v ? an : aus).push(T.gruppen[k] || k); }
     // Deutsch und Englisch: „Bäume ausgeblendet.“; sonst „Masqué : arbres.“, das stimmt in Einzahl und Mehrzahl
     const liste = (w, L) => T.doppelpunkt ? w[0].toUpperCase() + w.slice(1) + T.doppelpunkt + L.join(', ').toLowerCase() + '.' : L.join(', ') + ' ' + w + '.';
     if (an.length) gesagt.push(liste(T.an, an)); if (aus.length) gesagt.push(liste(T.aus, aus)); }
