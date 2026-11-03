@@ -1,0 +1,68 @@
+  166797  (Ebene 0_Layer0) #cfc9bf
+  130308  (Ebene moebel bibliothek) #fafafa
+   83632  (Ebene Layer0) #e8e1c4
+   43200  (Ebene kueche neu keramik) #eee9de
+   18548  (Ebene griffe) #babcbf
+   13619  (Ebene kueche neu sperrholz) #ffffff
+   10968  (Ebene salon eiche) #7e7e7e
+   10346  (Ebene gelaender) #3a3c3f
+    8828  (Ebene salon chrom) #e4e6ea
+    5910  (Ebene pflanze olive) #7e8c6a
+    5832  (Ebene pflanze lavendel) #8068aa
+    3936  (Ebene sonnenschutz holz) #ac7c4e
+    3578  (Ebene messing) #b88e4a
+    3456  (Ebene klima) #f6f6f4
+    3402  (Ebene moebel textil) #f2f0ea
+    3338  (Ebene topf terrakotta) #b06848
+    2976  (Ebene schrank eingang regal) #ffffff
+    2784  (Ebene salon papier) #f6f3e9
+    2652  (Ebene heizkoerper) #f0f0ee
+    2168  (Ebene salon pflanze) #286932
+    2036  (Ebene bad) #fafaf8
+    2016  (Ebene pflanze gruen) #346e3a
+    1755  (Ebene salon naht) #ece6d6
+    1668  (Ebene elektro) #fafaf8
+    1612  (Ebene fenster rahmen) #f5f3ed
+    1568  (Ebene 2D Drafting - General) #e9e5dd
+    1200  (Ebene salon vinyl) #0e0e0e
+    1068  (Ebene salon cover) #c4a06e
+    1008  (Ebene pflanze erde) #3c2d23
+     996  (Ebene elektro detail) #cdcdcd
+     956  (Ebene salon orange) #f07612
+     950  (Ebene schiebetuer versteckt) #ffffff
+     722  (Ebene pflanze stamm) #624e3a
+     648  (Ebene klima dunkel) #3c3c3e
+     648  (Ebene pflanze zitrone) #f0ce3e
+     624  (Ebene bad fliese salbei) #a0ac94
+     592  (Ebene boden eiche) #d8c19c
+     484  (Ebene glas) #deecec
+     484  (Ebene salon schwarz matt) #161616
+     444  (Ebene glas fenster) #deecec
+     412  (Ebene kueche zustand offen laeden) #babcbf
+     392  (Ebene boden estrich) #b8b4ac
+     328  (Ebene salon samt blau) #182c8c
+     292  (Ebene treppe) #cecbc4
+     288  (Ebene elektro anschluss) #f08214
+     264  (Ebene kueche neu travertin) #e2d3ba
+     252  (Ebene tuerblatt) #f5f3ed
+     220  (Ebene tueren rahmen) #f5f3ed
+     170  (Ebene salon leder braun) #482a1e
+     120  (Ebene aufzug) #babcbf
+      92  (Ebene decke) #f5f5f3
+      84  (Ebene licht led) #fff4d6
+      84  (Ebene salon leder schwarz) #18181a
+      72  (Ebene sonnenschutz stoff) #e8deca
+      60  (Ebene salon hifi) #96989c
+      56  (Ebene boden marmor) #eeeeec
+      36  (Ebene moebel geraete) #f6f6f6
+      36  (Ebene kueche neu kochfeld) #161618
+      36  (Ebene kueche zustand offen griffe) #babcbf
+      36  (Ebene teppich jute) #be9b6c
+      28  (Ebene kueche neu becken) #cec0a8
+      12  (Ebene boden lehm) #ba704e
+      12  (Ebene kueche zustand offen) #ffffff
+      12  (Ebene kueche neu pfosten) #c9a87a
+      12  (Ebene kueche neu fuge) #e2dccf
+      12  (Ebene salon teppich rand) #582822
+      12  (Ebene salon teppich natur) #cec0a4
+       2  (Ebene salon teppich) #964637
