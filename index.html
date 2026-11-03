@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta name="robots" content="noindex">
-<script>window.AMPHION_DATEIEN={"app.js":"5a495f3270","bauplatz.js":"43a2842860","betrachter.js":"37a1c3cdd5","bilder/plano_a.jpg":"26152ed860","bilder/plano_b.jpg":"01c641782a","bilder/render_bano_A.jpg":"035e8f038d","bilder/render_cocina_desde_comedor.jpg":"70f9f999de","bilder/render_comedor.jpg":"46f2c67deb","bilder/render_dormitorio_1.jpg":"bf7c2a0b07","bilder/render_isla_abierta.jpg":"50d804bc43","bilder/render_salon.jpg":"6bfdd0b045","bilder/render_terraza.jpg":"28d8382729","favicon.svg":"5f71fbf261","modell/monteesquinza/architektur.glb":"b75a104689","modell/monteesquinza/einbauten.glb":"4e4be40666","modell/monteesquinza/farben.json":"9bdc7cad48","modell/monteesquinza/farben_rhino.txt":"30eb7f6d86","modell/monteesquinza/info.json":"1a5b893c58","modell/monteesquinza/moebel.glb":"d20eb763e6","modell/monteesquinza/stadt.glb":"d1d2c7a9a6","modell/monteesquinza/stadt.json":"634ed3ed96","modell/monteesquinza/technik.glb":"bc1a523d1c","style.css":"b59d372c26"}</script>
+<script>window.AMPHION_DATEIEN={"app.js":"5a495f3270","bauplatz.js":"43a2842860","betrachter.js":"37a1c3cdd5","bilder/plano_a.jpg":"26152ed860","bilder/plano_b.jpg":"01c641782a","bilder/render_bano_A.jpg":"035e8f038d","bilder/render_cocina_desde_comedor.jpg":"70f9f999de","bilder/render_comedor.jpg":"46f2c67deb","bilder/render_dormitorio_1.jpg":"bf7c2a0b07","bilder/render_isla_abierta.jpg":"50d804bc43","bilder/render_salon.jpg":"6bfdd0b045","bilder/render_terraza.jpg":"28d8382729","favicon.svg":"5f71fbf261","modell/monteesquinza/architektur.glb":"b75a104689","modell/monteesquinza/einbauten.glb":"4e4be40666","modell/monteesquinza/farben.json":"9bdc7cad48","modell/monteesquinza/farben_rhino.txt":"30eb7f6d86","modell/monteesquinza/fern.glb":"c8fb582618","modell/monteesquinza/info.json":"1a5b893c58","modell/monteesquinza/kacheln.glb":"39a82ec7ed","modell/monteesquinza/moebel.glb":"d20eb763e6","modell/monteesquinza/stadt.glb":"76c12aa653","modell/monteesquinza/stadt.json":"10219abb1a","modell/monteesquinza/technik.glb":"bc1a523d1c","style.css":"343a10af86"}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="titel">Amphion Estate · Tu vivienda, construida en 3D antes de venderla</title>
@@ -20,7 +20,7 @@
 <meta property="og:image" content="https://estate.amphion3d.com/bilder/render_salon.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.svg?v=5f71fbf261" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=b59d372c26">
+<link rel="stylesheet" href="style.css?v=343a10af86">
 </head>
 <body>
 
@@ -78,7 +78,7 @@
     <button type="button" data-aktion='{"gruppen":{"stadt":false}}' data-i18n="chip.6">Sin la ciudad</button>
     <button type="button" data-aktion='{"alles":true}' data-i18n="chip.zurueck">Todo como antes</button>
   </div>
-  <div class="m-buehne"><canvas></canvas><span class="m-status"></span><span class="m-fehler" hidden data-i18n="modell.fehler">No se pudo cargar el modelo.</span></div>
+  <div class="m-buehne"><canvas></canvas><span class="m-status"></span><span class="m-quelle">Ciudad 3D: Google</span><span class="m-fehler" hidden data-i18n="modell.fehler">No se pudo cargar el modelo.</span></div>
   <p class="m-steuerung" data-i18n="modell.steuerung">Arrastrar gira · botón derecho o dos dedos desplazan · rueda o dos dedos acercan</p>
 </section>
 
@@ -165,11 +165,11 @@
 // Modell des Betrachters (site/betrachter.js, hier kopiert): die Wohnung, Y oben, Mitte des Grundrisses im Ursprung, Fußboden bei 0
 window.AMPHION_MODELLE = {
   monteesquinza: {
-    basis: 'modell/monteesquinza/', dateien: { stadt: 'stadt.glb', architektur: 'architektur.glb', einbauten: 'einbauten.glb', technik: 'technik.glb', moebel: 'moebel.glb' },
-    versatz: { stadt: [0, -18.6, 0] }, ohneSchnittflaechen: ['stadt'],   // Stadt aus dem Kataster (Chamberí), Straßenniveau 6 Geschosse unter der Wohnung
-    anflug: { pos: [900, 700, 1100], ziel: [0, -10, 0], dauer: 7, wartezeit: 1800 },
+    basis: 'modell/monteesquinza/', dateien: { stadt: 'stadt.glb', kacheln: 'kacheln.glb', fern: 'fern.glb', architektur: 'architektur.glb', einbauten: 'einbauten.glb', technik: 'technik.glb', moebel: 'moebel.glb' },
+    versatz: { stadt: [0, -18.6, 0], kacheln: [0, -18.6, 0], fern: [0, -18.6, 0] }, ohneSchnittflaechen: ['stadt', 'kacheln', 'fern'],   // Fotostadt (Google 3D, tools/stadt_google_web.py): nah bis 300 m, bis 1,5 km, bis 6,5 km; Straße 6 Geschosse unter der Wohnung
+    anflug: { pos: [2600, 2300, 3100], ziel: [0, -10, 0], dauer: 9, wartezeit: 2500 },
     kappen: ['architektur', 'einbauten'],
-    nah: 0.05, fern: 6000, nahst: 0.4, fernst: 2500, start: 'ecke', schnittStart: 'planta',
+    nah: 0.05, fern: 14000, nahst: 0.4, fernst: 2500, start: 'ecke', schnittStart: 'planta',
     blicke: { ecke: { pos: [22, 15, 19], ziel: [0, 0, 0] }, oben: { pos: [0.01, 38, 0], ziel: [0, 0, 0] }, salon: { pos: [2.6, 1.5, 1.0], ziel: [8.5, 1.0, 6.5] }, terraza: { pos: [9.3, 1.6, 6.8], ziel: [3.2, 1.0, 2.0] } },
     schnitte: { planta: [0, -1, 0, 1.2], laengs: [1, 0, 0, 0], quer: [0, 0, -1, 0] },
     // Rundgang: die in Rhino gespeicherten Ansichten der Wohnung, in ihrer Reihenfolge durchs Haus (tools/read3dm.py views)
