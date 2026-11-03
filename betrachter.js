@@ -135,9 +135,15 @@ function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) 
 // unschärfer wie Google): weit weg (über m.haus.nah Meter) nur die Fotostadt mit dem Google-Haus (Knoten „eigenhaus“ der Kacheln, m.haus.ganz);
 // nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
 function hausWahl() { const m = aktiv, h = m?.haus; if (!h) return; if (!h.geladen) { h.geladen = true; for (const k of h.wohnung) lade(k); }   // Wohnung schon beim Anflug laden, unsichtbar
-  const b = h.innen, p = camera.position; const innen = !!m.schnitt || (!!h.nah && p.length() < h.nah) || (p.x > b[0] && p.x < b[3] && p.y > b[1] && p.y < b[4] && p.z > b[2] && p.z < b[5]); if (innen === m.hausInnen) return; m.hausInnen = innen; for (const k of Object.keys(m.dateien)) zeige(k); for (const o of m.eigenhaus || []) o.visible = !innen; }
+  const b = h.innen, p = camera.position, kasten = p.x > b[0] && p.x < b[3] && p.y > b[1] && p.y < b[4] && p.z > b[2] && p.z < b[5]; const innen = !!m.schnitt || (!!h.nah && p.length() < h.nah) || kasten;
+  if (innen === m.hausInnen && m.schnitt === m.hausSchnitt && kasten === m.hausKasten) return; m.hausInnen = innen; m.hausSchnitt = m.schnitt; m.hausKasten = kasten;
+  for (const k of Object.keys(m.dateien)) zeige(k); for (const o of m.eigenhaus || []) o.visible = !innen;
+  // von außen ohne Schnitt: Deckenplatte der Wohnung aus (h.dach = Höhe unter der Platte), darüber liegt das Google-Dach; von innen bleibt die Decke
+  const dach = !m.schnitt && !kasten && h.dach ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), h.dach)] : null;
+  if (!m.schnitt) for (const k of h.wohnung) m.gruppen[k]?.traverse(o => { if (o.isMesh && o.material) for (const mat of [].concat(o.material)) mat.clippingPlanes = dach; });
+}
 // Schnitt nur für die Gruppen außerhalb m.ungeschnitten (Estate: die Fotostadt bleibt ganz), darum Ebenen je Material statt am Renderer
-function clipSetzen(m) { for (const [k, g] of Object.entries(m.gruppen)) { const frei = m.ungeschnitten?.includes(k); g.traverse(o => { if (o.isMesh && o.material) for (const mat of [].concat(o.material)) mat.clippingPlanes = frei || !m.ebenen?.length ? null : m.ebenen; }); } }
+function clipSetzen(m) { for (const [k, g] of Object.entries(m.gruppen)) { const frei = m.ungeschnitten?.includes(k) || m.ungeschnittenBei?.[m.schnitt]?.includes(k); /* Estate: bei „ohne Decke“ bleibt das Google-Haus ganz */ g.traverse(o => { if (o.isMesh && o.material) for (const mat of [].concat(o.material)) mat.clippingPlanes = frei || !m.ebenen?.length ? null : m.ebenen; }); } }
 function groesse() {
   const w = canvas.clientWidth, h = canvas.clientHeight; renderer.setSize(w, h, false);
   if (camera?.isOrthographicCamera) { const r = camera.userData.r, a = w / h; camera.left = -r * a; camera.right = r * a; camera.top = r; camera.bottom = -r; }
@@ -165,7 +171,7 @@ function aktiviere(name) {
 }
 // Sichtbar ist eine Gruppe, wenn ihr Schalter an ist; Gruppen des Zustands folgen dem Zustand
 function sollSichtbar(k) { const m = aktiv; if (m.zustaende) { const z = m.zustaende[m.zustand]; if (k in z && !z[k]) return false; }
-  const h = m.haus; if (h && (k === h.ganz || k === h.schnitt)) return m.sichtbar.stadt !== false && (k === h.schnitt) === !!m.hausInnen;   // folgt dem Schalter Stadt
+  const h = m.haus; if (h && (k === h.ganz || k === h.schnitt || k === h.offen)) { const w = !m.hausInnen ? h.ganz : h.offen && m.schnitt === 'planta' ? h.offen : h.schnitt; return m.sichtbar.stadt !== false && k === w; }   // folgt dem Schalter Stadt; h.offen: ohne Decke von oben
   if (h && h.wohnung.includes(k) && !m.hausInnen && m.sichtbar.stadt !== false && m.sichtbar[k] !== false) return false; return m.sichtbar[k === 'kacheln' || k === 'fern' ? 'stadt' : k] !== false; }
 function zustand(z) { const m = aktiv; if (!m.zustaende?.[z]) return; m.zustand = z; for (const k of Object.keys(m.dateien)) zeige(k); }
 function zeige(k) { const m = aktiv, soll = sollSichtbar(k); if (m.gruppen[k]) m.gruppen[k].visible = soll; else if (soll) lade(k); if (m.baumNetz && m.baeume?.gruppe === k) m.baumNetz.visible = soll; }
@@ -221,6 +227,7 @@ async function lade(k) {
     g.add(d.scene); g.visible = m === aktiv ? sollSichtbar(k) : true;
     if (m.versatz?.[k]) g.position.set(...m.versatz[k]);   // z. B. Stadt: Straßenniveau unter dem Wohnungsgeschoss
     if (m.ebenen?.length) clipSetzen(m);   // nachgeladene Gruppe in den laufenden Schnitt
+    if (m.haus?.wohnung.includes(k)) m.hausSchnitt = undefined;   // Wohnungsteil nachgeladen: hausWahl setzt Sichtbarkeit und Deckenschnitt neu
     if (m === aktiv && m.schnitt) strukturAnsicht(true); if (status?.textContent === '…') melde('');   // nachgeladene Gruppe in die laufende Strukturansicht
   } catch (e) { melde(fehler?.textContent || 'Fehler'); console.error(e); }
 }

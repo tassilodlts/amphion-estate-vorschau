@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta name="robots" content="noindex">
-<script>window.AMPHION_DATEIEN={"app.js":"5a495f3270","bauplatz.js":"43a2842860","betrachter.js":"3896f6bed4","bilder/plano_a.jpg":"26152ed860","bilder/plano_b.jpg":"01c641782a","bilder/render_bano_A.jpg":"035e8f038d","bilder/render_cocina_desde_comedor.jpg":"70f9f999de","bilder/render_comedor.jpg":"46f2c67deb","bilder/render_dormitorio_1.jpg":"bf7c2a0b07","bilder/render_isla_abierta.jpg":"50d804bc43","bilder/render_salon.jpg":"6bfdd0b045","bilder/render_terraza.jpg":"28d8382729","favicon.svg":"5f71fbf261","modell/monteesquinza/architektur.glb":"b75a104689","modell/monteesquinza/einbauten.glb":"4e4be40666","modell/monteesquinza/farben.json":"9bdc7cad48","modell/monteesquinza/farben_rhino.txt":"30eb7f6d86","modell/monteesquinza/hausschnitt.glb":"f935b9d627","modell/monteesquinza/info.json":"1a5b893c58","modell/monteesquinza/moebel.glb":"d20eb763e6","modell/monteesquinza/stadt.json":"31dc58dc7c","modell/monteesquinza/stadt3d/tileset.json":"6e9c7f661f","modell/monteesquinza/technik.glb":"bc1a523d1c","style.css":"343a10af86"}</script>
+<script>window.AMPHION_DATEIEN={"app.js":"88cc1d84ba","bauplatz.js":"43a2842860","betrachter.js":"1629782402","bilder/plano_a.jpg":"26152ed860","bilder/plano_b.jpg":"01c641782a","bilder/render_bano_A.jpg":"035e8f038d","bilder/render_cocina_desde_comedor.jpg":"70f9f999de","bilder/render_comedor.jpg":"46f2c67deb","bilder/render_dormitorio_1.jpg":"bf7c2a0b07","bilder/render_isla_abierta.jpg":"50d804bc43","bilder/render_salon.jpg":"6bfdd0b045","bilder/render_terraza.jpg":"28d8382729","favicon.svg":"5f71fbf261","modell/monteesquinza/architektur.glb":"b75a104689","modell/monteesquinza/einbauten.glb":"4e4be40666","modell/monteesquinza/farben.json":"9bdc7cad48","modell/monteesquinza/farben_rhino.txt":"30eb7f6d86","modell/monteesquinza/hausoffen.glb":"d59dbfe888","modell/monteesquinza/hausschnitt.glb":"fe1d4b335f","modell/monteesquinza/info.json":"1a5b893c58","modell/monteesquinza/moebel.glb":"d20eb763e6","modell/monteesquinza/stadt.json":"31dc58dc7c","modell/monteesquinza/stadt3d/tileset.json":"6e9c7f661f","modell/monteesquinza/technik.glb":"bc1a523d1c","style.css":"343a10af86"}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="titel">Amphion Estate · Tu vivienda, construida en 3D antes de venderla</title>
@@ -70,7 +70,7 @@
   </form>
   <div class="m-chips" data-leiste="monteesquinza">
     <button type="button" data-aktion='{"rundgang":true}' data-i18n="chip.0">Recorrido guiado</button>
-    <button type="button" data-aktion='{"schnitt":"planta","blick":"oben","kamera":"axo"}' data-i18n="chip.1">Córtala a 1,20 m, como el plano</button>
+    <button type="button" data-aktion='{"schnitt":"planta","blick":"oben","kamera":"axo"}' data-i18n="chip.1">Sin techo: toda la vivienda desde arriba</button>
     <button type="button" data-aktion='{"gruppen":{"moebel":false}}' data-i18n="chip.2">Quita los muebles</button>
     <button type="button" data-aktion='{"gruppen":{"moebel":false,"technik":false,"einbauten":false}}' data-i18n="chip.3">Solo la arquitectura</button>
     <button type="button" data-aktion='{"gruppen":{"technik":true,"moebel":false}}' data-i18n="chip.4">Enséñame la instalación</button>
@@ -165,28 +165,28 @@
 // Modell des Betrachters (site/betrachter.js, hier kopiert): die Wohnung, Y oben, Mitte des Grundrisses im Ursprung, Fußboden bei 0
 window.AMPHION_MODELLE = {
   monteesquinza: {
-    basis: 'modell/monteesquinza/', dateien: { stadt: 'stadt3d/tileset.json', hausschnitt: 'hausschnitt.glb', architektur: 'architektur.glb', einbauten: 'einbauten.glb', technik: 'technik.glb', moebel: 'moebel.glb' },
-    versatz: { stadt: [0, -18.6, 0], hausschnitt: [0, -18.6, 0] }, ohneSchnittflaechen: ['stadt', 'hausschnitt'], ungeschnitten: ['stadt'], kachelFehler: 12,   // Fotostadt als 3D-Tiles (tools/stadt_google_tiles.py), Stufen 128 m bis 2 m
+    basis: 'modell/monteesquinza/', dateien: { stadt: 'stadt3d/tileset.json', hausschnitt: 'hausschnitt.glb', hausoffen: 'hausoffen.glb', architektur: 'architektur.glb', einbauten: 'einbauten.glb', technik: 'technik.glb', moebel: 'moebel.glb' },
+    versatz: { stadt: [0, -21.3, 0], hausschnitt: [0, -21.3, 0], hausoffen: [0, -21.3, 0] }, ohneSchnittflaechen: ['stadt', 'hausschnitt', 'hausoffen'], ungeschnitten: ['stadt'], ungeschnittenBei: { planta: ['hausoffen'] }, kachelFehler: 12,   // Fotostadt als 3D-Tiles (tools/stadt_google_tiles.py), Stufen 128 m bis 2 m
     // eigenes Haus aus der Fotostadt (tools/stadt_google_web.py haus=, hausschnitt=): näher als 150 m oder im Schnitt ohne Wohnungsgeschoss, dort unsere echte Fassade mit Fenstern (Tassilo 3.11.), Dach bleibt; weiter weg das Google-Haus aus den Kacheln
     glas: { deckung: 0.16, spiegel: 0.45 },
-    haus: { nah: 150, schnitt: 'hausschnitt', wohnung: ['architektur', 'einbauten', 'technik', 'moebel'], innen: [-11.5, -0.6, -11, 11.5, 3.6, 11] },
+    haus: { nah: 150, dach: 2.68, schnitt: 'hausschnitt', offen: 'hausoffen', wohnung: ['architektur', 'einbauten', 'technik', 'moebel'], innen: [-11.5, -0.6, -11, 11.5, 3.6, 11] },
     anflug: { pos: [2600, 2300, 3100], ziel: [0, -10, 0], dauer: 9, wartezeit: 2500 },
     kappen: ['architektur', 'einbauten'],
     nah: 0.05, fern: 14000, nahst: 0.4, fernst: 2500, start: 'ecke', schnittStart: 'planta',
     blicke: { ecke: { pos: [22, 15, 19], ziel: [0, 0, 0] }, oben: { pos: [0.01, 38, 0], ziel: [0, 0, 0] }, salon: { pos: [2.6, 1.5, 1.0], ziel: [8.5, 1.0, 6.5] }, terraza: { pos: [9.3, 1.6, 6.8], ziel: [3.2, 1.0, 2.0] } },
-    schnitte: { planta: [0, -1, 0, 1.2], laengs: [1, 0, 0, 0], quer: [0, 0, -1, 0] },
+    schnitte: { planta: [0, -1, 0, 2.38],   /* 3.11. (Tassilo): nicht bei 1,20 m schneiden, nur die Decke weg (Platte 2,70 bis 2,80 m, abgehängte Decken ab 2,40 m) */ laengs: [1, 0, 0, 0], quer: [0, 0, -1, 0] },
     // Rundgang: die in Rhino gespeicherten Ansichten der Wohnung, in ihrer Reihenfolge durchs Haus (tools/read3dm.py views)
     rundgang: [{"name":"Entrada","pos":[1.03,1.25,-0.15],"ziel":[0.38,1.25,-2.35]},{"name":"Pasillo","pos":[-1.16,1.25,-0.58],"ziel":[-5.52,1.25,-0.58]},{"name":"Cocina","pos":[5.88,1.25,-0.55],"ziel":[-5.52,1.25,-0.58]},{"name":"Cocina, eje","pos":[3.53,1.3,-1.97],"ziel":[3.53,1.3,-4.55]},{"name":"Comedor","pos":[6.14,1.2,-0.53],"ziel":[8.48,1.2,-2.85]},{"name":"Salón","pos":[5.58,1.2,-0.87],"ziel":[3.48,1.2,2.45]},{"name":"Sala de estar","pos":[5.24,1.2,6.13],"ziel":[8.08,1.2,8.05]},{"name":"Terraza","pos":[6.38,1.5,-4.15],"ziel":[8.68,1.5,-6.75]},{"name":"Dormitorio 2","pos":[-1.3,1.2,-2.53],"ziel":[-3.82,1.2,-4.65]},{"name":"Dormitorio 1","pos":[-5.96,1.2,-2.53],"ziel":[-8.72,1.2,-4.65]},{"name":"Baño A","pos":[-5.57,1.3,-7.15],"ziel":[-3.92,1.3,-8.3]},{"name":"Dormitorio 3","pos":[5.48,1.2,-5.79],"ziel":[2.78,1.2,-7.35]}],
     sagt: {
-      es: { rundgangStart: 'Recorrido guiado. Toca el modelo para parar.', rundgangSchritt: '{n}', rundgangEnde: 'Fin del recorrido.', schnitt: { planta: 'Cortada a 1,20 m, como el plano.', laengs: 'Corte longitudinal.', quer: 'Corte transversal.', kein: 'Sin corte.' }, blick: { ecke: 'Vista general.', oben: 'Desde arriba.', salon: 'En el salón.', terraza: 'En la terraza.' } },
-      en: { rundgangStart: 'Guided walk. Touch the model to stop.', rundgangSchritt: '{n}', rundgangEnde: 'End of the walk.', schnitt: { planta: 'Cut at 1.20 m, like the plan.', laengs: 'Longitudinal section.', quer: 'Cross section.', kein: 'No section.' }, blick: { ecke: 'Overview.', oben: 'From above.', salon: 'In the living room.', terraza: 'On the terrace.' } },
-      de: { rundgangStart: 'Geführter Rundgang. Tipp aufs Modell zum Anhalten.', rundgangSchritt: '{n}', rundgangEnde: 'Ende des Rundgangs.', schnitt: { planta: 'Bei 1,20 m geschnitten, wie der Plan.', laengs: 'Längsschnitt.', quer: 'Querschnitt.', kein: 'Kein Schnitt.' }, blick: { ecke: 'Übersicht.', oben: 'Von oben.', salon: 'Im Salon.', terraza: 'Auf der Terrasse.' } },
+      es: { rundgangStart: 'Recorrido guiado. Toca el modelo para parar.', rundgangSchritt: '{n}', rundgangEnde: 'Fin del recorrido.', schnitt: { planta: 'Sin techo: toda la vivienda desde arriba.', laengs: 'Corte longitudinal.', quer: 'Corte transversal.', kein: 'Sin corte.' }, blick: { ecke: 'Vista general.', oben: 'Desde arriba.', salon: 'En el salón.', terraza: 'En la terraza.' } },
+      en: { rundgangStart: 'Guided walk. Touch the model to stop.', rundgangSchritt: '{n}', rundgangEnde: 'End of the walk.', schnitt: { planta: 'Ceiling removed: the whole home from above.', laengs: 'Longitudinal section.', quer: 'Cross section.', kein: 'No section.' }, blick: { ecke: 'Overview.', oben: 'From above.', salon: 'In the living room.', terraza: 'On the terrace.' } },
+      de: { rundgangStart: 'Geführter Rundgang. Tipp aufs Modell zum Anhalten.', rundgangSchritt: '{n}', rundgangEnde: 'Ende des Rundgangs.', schnitt: { planta: 'Decke weg: die ganze Wohnung von oben.', laengs: 'Längsschnitt.', quer: 'Querschnitt.', kein: 'Kein Schnitt.' }, blick: { ecke: 'Übersicht.', oben: 'Von oben.', salon: 'Im Salon.', terraza: 'Auf der Terrasse.' } },
     },
   },
 };
 </script>
-<script src="app.js?v=5a495f3270"></script>
+<script src="app.js?v=88cc1d84ba"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","3d-tiles-renderer/three":"https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.28/build/index.three.js"}}</script>
-<script type="module" src="betrachter.js?v=3896f6bed4"></script>
+<script type="module" src="betrachter.js?v=1629782402"></script>
 </body>
 </html>
