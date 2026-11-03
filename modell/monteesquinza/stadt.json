@@ -1,0 +1,18 @@
+{
+ "ursprung": [
+  441306.4,
+  4475465
+ ],
+ "epsg": 25830,
+ "gebaeude": 7284,
+ "dreiecke": 460716,
+ "ausdehnung": [
+  -1598.7,
+  -1107.6,
+  1767.6,
+  1829.3
+ ],
+ "geschoss": 3.1,
+ "ref": "1456914VK4715E",
+ "quelle": "Dirección General del Catastro, INSPIRE BU, CC BY 4.0"
+}

@@ -105,12 +105,32 @@ function start() {
     if (m.boden) { const b = new THREE.Mesh(new THREE.CircleGeometry(m.boden.r, 96), new THREE.MeshBasicMaterial({ color: m.boden.farbe ?? 0xf2f2f2 })); b.rotation.x = -Math.PI / 2; b.position.y = m.boden.y; m.wurzel.add(b); }
   }
   addEventListener('resize', groesse);
+  for (const ev of ['pointerdown', 'wheel']) canvas.addEventListener(ev, fahrtAbbrechen, { passive: true });
   const reiter = wrap.querySelector('.m-reiter button.on') || wrap.querySelector('.m-reiter button');
   aktiviere(reiter ? reiter.dataset.modell : Object.keys(MODELLE)[0]);
   groesse();   // Zeichenpuffer in voller Größe und Pixeldichte, sonst bleibt es bei 300 x 150 und wird unscharf
   schleife();
 }
-function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; controls?.update(); renderer.render(scene, camera); }
+// Kamerafahrt (3.11.2026, Estate: Anflug aus der Stadt, geführter Rundgang): weich von der aktuellen Lage zu Standpunkt und Ziel, Steuerung
+// währenddessen aus, jede Eingabe am Bild bricht Fahrt und Rundgang ab
+let fahrt = null, rundgangLauf = null;
+function fahren(pos, ziel, dauer = 3, danach = null) {
+  const p0 = camera.position.clone(), t0 = controls.target.clone(), p1 = new THREE.Vector3(...pos), t1 = new THREE.Vector3(...ziel), start = performance.now();
+  controls.enabled = false;
+  fahrt = () => { const u = Math.min(1, (performance.now() - start) / (dauer * 1000)), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    camera.position.lerpVectors(p0, p1, e); controls.target.lerpVectors(t0, t1, e); camera.lookAt(controls.target);
+    if (u >= 1) { fahrt = null; controls.enabled = true; controls.update(); danach?.(); } };
+}
+function fahrtAbbrechen() { if (fahrt || rundgangLauf) { fahrt = null; rundgangLauf = null; if (controls) { controls.enabled = true; controls.target.copy(controls.target); } } }
+function rundgang(m) {
+  const S = m.rundgang; if (!S?.length) return false;
+  if (m.schnitt) schnitt('kein'); if (axo) projektion('persp');
+  const T = sagtFuer(m); let i = 0; rundgangLauf = m;
+  const weiter = () => { if (rundgangLauf !== m || i >= S.length) { if (rundgangLauf === m) { rundgangLauf = null; melde(T.rundgangEnde || ''); } return; } const st = S[i++]; melde(T.rundgangSchritt ? T.rundgangSchritt.replace('{n}', st.name) : st.name); fahren(st.pos, st.ziel, st.dauer || 4, () => setTimeout(weiter, (st.pause || 1.2) * 1000)); };
+  fahren(S[0].pos, S[0].ziel, 2.5, () => { i = 1; melde(S[0].name); setTimeout(weiter, 1200); });
+  return true;
+}
+function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); renderer.render(scene, camera); }
 function groesse() {
   const w = canvas.clientWidth, h = canvas.clientHeight; renderer.setSize(w, h, false);
   if (camera?.isOrthographicCamera) { const r = camera.userData.r, a = w / h; camera.left = -r * a; camera.right = r * a; camera.top = r; camera.bottom = -r; }
@@ -127,7 +147,11 @@ function aktiviere(name) {
   scene.fog = m.nebel ? new THREE.Fog(m.nebel[0], m.nebel[1], m.nebel[2]) : null;   // ferne Stadt und Berge verblassen
   for (const b of wrap.querySelectorAll('.m-reiter button')) b.classList.toggle('on', b.dataset.modell === name);
   for (const l of leisten()) l.hidden = l.dataset.leiste !== name;
-  blick(m.start); schnitt(m.schnitt || m.schnittStart || 'kein');   // schnittStart: Modell beginnt geschnitten (Estate: wie der Plan)
+  if (m.anflug && !m.angeflogen) {   // Anflug (Estate): erst der Blick aus der Stadt, nach dem Laden die Fahrt zum Startblick
+    m.angeflogen = true; kamera(m.anflug.pos, m.anflug.ziel);
+    setTimeout(() => { if (aktiv === m && !fahrt) { const b = m.blicke[m.start]; fahren(b.pos, b.ziel, m.anflug.dauer || 6, () => { if (m.schnittStart && !m.schnitt) schnitt(m.schnittStart); }); } }, m.anflug.wartezeit || 1500);
+    schnitt('kein');
+  } else { blick(m.start); schnitt(m.schnitt || m.schnittStart || 'kein'); }   // schnittStart: Modell beginnt geschnitten (Estate: wie der Plan)
   for (const k of Object.keys(m.dateien)) zeige(k);
   if (m.baeume) ladeBaeume(m);
   if (m.bau && !m.teile) { let g = null; try { g = JSON.parse(localStorage.getItem('amphion.bau') || 'null'); } catch { /* ohne Speicher */ } setzeBau(Array.isArray(g) && g.length ? g : BAU_START, false); }
@@ -163,10 +187,11 @@ async function lade(k) {
       if (solid && kappenGruppe_) { const s = kappenGruppe(o.geometry); s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }
       // offene Körper (Wände ohne Deckel, Böden als Fläche) in denselben Gruppen: im Schnitt nur Vorderseiten, Rückseiten dunkel, so wirkt
       // auch ein offener Wandkasten massiv; ohne Schnitt wieder beidseitig, damit nichts durchsichtig wird
-      if (!glas && !kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!renderer.clippingPlanes.length; o.add(s); m.schnittflaechen.push(s); }   // wie bisher (Hochhaus: rote Tragwerksflächen in der Strukturansicht)
+      if (!glas && !kappenGruppe_ && !m.ohneSchnittflaechen?.includes(k)) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!renderer.clippingPlanes.length; o.add(s); m.schnittflaechen.push(s); }   // wie bisher (Hochhaus: rote Tragwerksflächen in der Strukturansicht)
       if (!glas && kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
     }
     g.add(d.scene); g.visible = m === aktiv ? sollSichtbar(k) : true;
+    if (m.versatz?.[k]) g.position.set(...m.versatz[k]);   // z. B. Stadt: Straßenniveau unter dem Wohnungsgeschoss
     if (m === aktiv && m.schnitt) strukturAnsicht(true); if (status?.textContent === '…') melde('');   // nachgeladene Gruppe in die laufende Strukturansicht
   } catch (e) { melde(fehler?.textContent || 'Fehler'); console.error(e); }
 }
@@ -281,7 +306,8 @@ function tun(a) {
   const m = aktiv;
   if (a.rueck && m.bau) { const v = m.verlauf?.pop(); if (v) { setzeBau(v, false); return T.rueck; } return T.nichtsRueck; }
   if (a.neu && m.bau) { setzeBau(BAU_START); blick(m.start); return T.neu; }
-  if (a.alles) { m.zustand = '2026'; for (const k of Object.keys(m.dateien)) m.sichtbar[k] = true; axo = false; blick(m.start); schnitt(m.schnittStart || 'kein'); for (const k of Object.keys(m.dateien)) zeige(k); return T.alles; }
+  if (a.rundgang) return rundgang(m) ? (T.rundgangStart || '') : T.unklar;
+  if (a.alles) { fahrtAbbrechen(); m.zustand = '2026'; for (const k of Object.keys(m.dateien)) m.sichtbar[k] = true; axo = false; blick(m.start); schnitt(m.schnittStart || 'kein'); for (const k of Object.keys(m.dateien)) zeige(k); return T.alles; }
   if (a.zustand && m.zustaende?.[String(a.zustand)]) { zustand(String(a.zustand)); gesagt.push(T.zustand[a.zustand]); }
   if (a.gruppen) { const an = [], aus = []; for (const [k, v] of Object.entries(a.gruppen)) { if (!(k in m.dateien) || k === 'kacheln' || k === 'fern') continue; m.sichtbar[k] = !!v; zeige(k); if (k === 'stadt') { if (m.dateien.kacheln) zeige('kacheln'); if (m.dateien.fern) zeige('fern'); } (v ? an : aus).push(T.gruppen[k] || k); }
     // Deutsch und Englisch: „Bäume ausgeblendet.“; sonst „Masqué : arbres.“, das stimmt in Einzahl und Mehrzahl
@@ -303,7 +329,8 @@ function tun(a) {
 window.formaZustand = () => { const m = aktiv; if (!m || !camera) return null; const sichtbar = {}; for (const k of Object.keys(m.dateien)) if (k !== 'kacheln' && k !== 'fern') sichtbar[k] = sollSichtbar(k);
   return { modell: m.name, sichtbar, zustand: m.zustand || null, schnitt: m.schnitt || 'kein', struktur: (() => { let d = null; m.gruppen.gebaeude?.traverse(o => { if (d === null && o.isMesh && o.material !== SCHNITT && !o.material.userData.glas) d = o.material.opacity; }); return d !== null && d < 0.2; })(), abstand: camera.position.distanceTo(controls.target), hoehe: camera.position.y, status: status?.textContent || '', zuruecksetzen: undefined }; };
 window.formaZustand.zuruecksetzen = () => { tun({ alles: true }); melde(''); };
-window.formaZustand.kamera = (pos, ziel) => kamera(pos, ziel);   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
+window.formaZustand.kamera = (pos, ziel) => kamera(pos, ziel);
+window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
 // Freien Text deuten: Stichwörter in drei Sprachen. Liefert eine Aktion oder null.
 const W = {
   neg: /\b(ohne|weg|aus\b|raus\b|lösch|losch|entfern|versteck|ausblend|nicht|kein|delete|without|hide|remove|no\b|sin\b|quita|oculta|fuera)/i,
