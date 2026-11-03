@@ -13,27 +13,27 @@
  "gruppen": {
   "architektur": {
    "datei": "architektur.glb",
-   "mb": 0.04,
+   "mb": 0.52,
    "dreiecke": 20490,
    "objekte": 763
-  },
-  "einbauten": {
-   "datei": "einbauten.glb",
-   "mb": 0.12,
-   "dreiecke": 86463,
-   "objekte": 1762
   },
   "technik": {
    "datei": "technik.glb",
    "mb": 0.02,
-   "dreiecke": 9708,
-   "objekte": 545
+   "dreiecke": 9324,
+   "objekte": 513
   },
   "moebel": {
    "datei": "moebel.glb",
-   "mb": 0.38,
-   "dreiecke": 434528,
-   "objekte": 830
+   "mb": 1.94,
+   "dreiecke": 398432,
+   "objekte": 778
+  },
+  "einbauten": {
+   "datei": "einbauten.glb",
+   "mb": 0.55,
+   "dreiecke": 86093,
+   "objekte": 1756
   }
  }
 }

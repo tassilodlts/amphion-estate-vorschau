@@ -145,7 +145,15 @@ async function lade(k) {
     const d = await loader.loadAsync(mitVersion(m.basis + m.dateien[k]));
     const netze = []; d.scene.traverse(o => { if (o.isMesh) netze.push(o); });   // erst sammeln: die Schnittflächen kommen als Kinder dazu
     for (const o of netze) {
-      if (o.material.map) { o.material = new THREE.MeshBasicMaterial({ map: o.material.map, side: THREE.DoubleSide }); o.frustumCulled = false; continue; }   // Fotokacheln: das Licht steckt im Foto
+      if (o.material.map && !o.material.name.startsWith('tex:')) { o.material = new THREE.MeshBasicMaterial({ map: o.material.map, side: THREE.DoubleSide }); o.frustumCulled = false; continue; }   // Fotokacheln: das Licht steckt im Foto
+      if (o.material.map) {   // texturierte Teile (Estate, Rhino-Materialien): beleuchtet, Bild wiederholt sich, geschlossene Körper bekommen Kappen
+        const solid = !!o.material.userData?.solid; o.material.map.wrapS = o.material.map.wrapT = THREE.RepeatWrapping; o.material.map.colorSpace = THREE.SRGBColorSpace; o.material.map.anisotropy = 4;
+        o.material = new THREE.MeshLambertMaterial({ map: o.material.map, vertexColors: true, flatShading: true, side: THREE.DoubleSide }); o.frustumCulled = false;   // flatShading: ohne Normalen im GLB sonst schwarz
+        const kappenGruppe_ = m.kappen ? m.kappen.includes(k) : KAPPEN_GRUPPEN.has(k);
+        if (solid && kappenGruppe_) { const s = kappenGruppe(o.geometry); s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }
+        if (kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
+        continue;
+      }
       const glas = o.material.name === 'glas', solid = o.material.name === 'solid';   // solid: geschlossene Körper (tools/web_3dm_glb.mjs), nur sie bekommen Kappen
       o.material = glas
         ? new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.04, envMap: UMGEBUNG, envMapIntensity: 1.35, transparent: true, opacity: 0.58, side: THREE.DoubleSide, depthWrite: false })   // spiegelt, leicht getönt
