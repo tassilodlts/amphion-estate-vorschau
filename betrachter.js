@@ -81,6 +81,7 @@ function kappenGruppe(geometry) {
   return g;
 }
 const SCHNITT_TRAGWERK = new THREE.MeshBasicMaterial({ color: 0x9b2c1f, side: THREE.BackSide });   // Schnittflächen des Tragwerks in der Strukturansicht
+const LICHT = {};   // Himmel, Sonne, Gegenlicht; m.hell je Modell (Estate 4.11., Tassilo: Wände weiß wie in Rhino, nicht grau)
 let UMGEBUNG = null;   // Spiegelbild für Glas (2.11., Tassilo: Glas am Hochhaus sah schlecht aus), einmal aus RoomEnvironment
 const leisten = () => wrap.querySelectorAll('[data-leiste]');
 
@@ -97,9 +98,9 @@ function start() {
   });
   scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
   { const pm = new THREE.PMREMGenerator(renderer); UMGEBUNG = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose(); }
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb8b8b8, 1.15));
-  const sonne = new THREE.DirectionalLight(0xffffff, 1.5); sonne.position.set(300, 500, 200); scene.add(sonne);
-  const s2 = new THREE.DirectionalLight(0xffffff, 0.5); s2.position.set(-200, 300, -400); scene.add(s2);
+  LICHT.himmel = new THREE.HemisphereLight(0xffffff, 0xb8b8b8, 1.15); scene.add(LICHT.himmel);
+  LICHT.sonne = new THREE.DirectionalLight(0xffffff, 1.5); LICHT.sonne.position.set(300, 500, 200); scene.add(LICHT.sonne);
+  LICHT.gegen = new THREE.DirectionalLight(0xffffff, 0.5); LICHT.gegen.position.set(-200, 300, -400); scene.add(LICHT.gegen);
   for (const [name, m] of Object.entries(MODELLE)) {
     m.name = name; m.wurzel = new THREE.Group(); m.wurzel.visible = false; m.gruppen = {}; m.sichtbar = Object.fromEntries(Object.keys(m.dateien).map(k => [k, true])); m.schnittflaechen = []; m.schnitt = null; scene.add(m.wurzel);
     if (m.boden) { const b = new THREE.Mesh(new THREE.CircleGeometry(m.boden.r, 96), new THREE.MeshBasicMaterial({ color: m.boden.farbe ?? 0xf2f2f2 })); b.rotation.x = -Math.PI / 2; b.position.y = m.boden.y; m.wurzel.add(b); }
@@ -158,6 +159,7 @@ function aktiviere(name) {
   if (aktiv) aktiv.wurzel.visible = false;
   aktiv = m; m.wurzel.visible = true;
   scene.fog = m.nebel ? new THREE.Fog(m.nebel[0], m.nebel[1], m.nebel[2]) : null;   // ferne Stadt und Berge verblassen
+  const L = m.hell || {}; LICHT.himmel.intensity = L.himmel ?? 1.15; LICHT.himmel.groundColor.set(L.boden ?? 0xb8b8b8); LICHT.sonne.intensity = L.sonne ?? 1.5; LICHT.gegen.intensity = L.gegen ?? 0.5;
   for (const b of wrap.querySelectorAll('.m-reiter button')) b.classList.toggle('on', b.dataset.modell === name);
   for (const l of leisten()) l.hidden = l.dataset.leiste !== name;
   if (m.anflug && !m.angeflogen) {   // Anflug (Estate): erst der Blick aus der Stadt, nach dem Laden die Fahrt zum Startblick

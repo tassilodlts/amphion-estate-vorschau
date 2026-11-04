@@ -58,7 +58,7 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 .m-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .m-chips button{font:inherit;font-size:14px;padding:7px 12px;border:1px solid var(--linie);background:var(--bg);cursor:pointer;border-radius:999px}
 .m-chips button:hover{border-color:var(--ink)}
-.m-buehne{position:relative;aspect-ratio:16/9;background:#f2f2f2;overflow:hidden}
+.m-buehne{position:relative;aspect-ratio:1/1;width:min(100%,calc(100svh - 120px));margin:0 auto;background:#f2f2f2;overflow:hidden}   /* 4.11. (Tassilo): quadratisch, beide Seiten gleich, ganz im Bildschirm */
 .m-buehne canvas{width:100%;height:100%;display:block;touch-action:none}
 .m-quelle{position:absolute;right:10px;bottom:8px;font-size:11px;color:#fff;opacity:.85;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none}   /* Namensnennung der Fotostadt (Google 3D Tiles) */
 .m-status{position:absolute;left:12px;bottom:10px;font-size:14px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none}
