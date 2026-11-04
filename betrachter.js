@@ -151,10 +151,10 @@ function fahrtAbbrechen() { if (fahrt || rundgangLauf) { fahrt = null; rundgangL
 function rundgang(m) {
   const S = m.rundgang; if (!S?.length) return false;
   if (m.schnitt) schnitt('kein'); if (axo) projektion('persp');
-  const T = sagtFuer(m); let i = 0; rundgangLauf = m;
-  const weiter = () => { if (rundgangLauf !== m || i >= S.length) { if (rundgangLauf === m) { rundgangLauf = null; melde(T.rundgangEnde || ''); } return; } const st = S[i++]; melde(T.rundgangSchritt ? T.rundgangSchritt.replace('{n}', st.name) : st.name); const nach = () => setTimeout(weiter, (st.pause || 1.6) * 1000), p0 = camera.position.toArray(), weg = Math.hypot(...st.pos.map((v, j) => v - p0[j]));
+  const T = sagtFuer(m), N = st => typeof st.name === 'object' ? st.name[sprache()] || st.name.es : st.name; let i = 0; rundgangLauf = m;   // Namen je Sprache (4.11.)
+  const weiter = () => { if (rundgangLauf !== m || i >= S.length) { if (rundgangLauf === m) { rundgangLauf = null; melde(T.rundgangEnde || ''); } return; } const st = S[i++]; melde(T.rundgangSchritt ? T.rundgangSchritt.replace('{n}', N(st)) : N(st)); const nach = () => setTimeout(weiter, (st.pause || 1.6) * 1000), p0 = camera.position.toArray(), weg = Math.hypot(...st.pos.map((v, j) => v - p0[j]));
     if (strahl(p0, st.pos) < weg) blenden(st.pos, st.ziel, nach); else fahren(st.pos, st.ziel, st.dauer || 3.5, nach); };
-  fahren(S[0].pos, S[0].ziel, 2.5, () => { i = 1; melde(S[0].name); setTimeout(weiter, 1200); });
+  fahren(S[0].pos, S[0].ziel, 2.5, () => { i = 1; melde(N(S[0])); setTimeout(weiter, 1200); });
   return true;
 }
 function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); kachelnNeu(); renderer.render(scene, camera); }
