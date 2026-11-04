@@ -9,6 +9,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { START as BAU_START, baue, bauLicht } from './bauplatz.js?v=43a2842860';
 
 const wrap = document.querySelector('#modell'); if (!wrap) throw new Error('kein #modell');
@@ -136,12 +137,23 @@ function zoomen(f) {   // f < 1 näher, f > 1 weiter weg; Grenzen der Steuerung 
   const v = camera.position.clone().sub(controls.target), d = Math.min(controls.maxDistance, Math.max(controls.minDistance, v.length() * f));
   camera.position.copy(controls.target).addScaledVector(v.normalize(), d);
 }
+function strahl(pos, ziel) {   // freier Blick von pos Richtung ziel bis zur ersten undurchsichtigen Fläche der Wohnung, Meter
+  const m = aktiv, o = new THREE.Vector3(...pos), r = new THREE.Raycaster(o, new THREE.Vector3(...ziel).sub(o).normalize(), 0.05, 60), ziele = [];
+  for (const k of m.haus?.wohnung || Object.keys(m.gruppen)) m.gruppen[k]?.traverse(x => { if (x.isMesh && x.visible && x.material !== SCHNITT && !x.material.transparent) ziele.push(x); });
+  return r.intersectObjects(ziele, false)[0]?.distance ?? Infinity;
+}
+// Rundgang (4.11.): liegt eine Wand zwischen zwei Halten, kurz abblenden und springen statt durch die Wand zu fahren
+function blenden(pos, ziel, danach) {
+  canvas.style.transition = 'opacity .3s'; canvas.style.opacity = '0';
+  setTimeout(() => { if (!rundgangLauf) { canvas.style.opacity = '1'; return; } camera.position.set(...pos); controls.target.set(...ziel); camera.lookAt(controls.target); controls.update(); canvas.style.opacity = '1'; setTimeout(() => danach?.(), 350); }, 320);
+}
 function fahrtAbbrechen() { if (fahrt || rundgangLauf) { fahrt = null; rundgangLauf = null; if (controls) { controls.enabled = true; controls.target.copy(controls.target); } } }
 function rundgang(m) {
   const S = m.rundgang; if (!S?.length) return false;
   if (m.schnitt) schnitt('kein'); if (axo) projektion('persp');
   const T = sagtFuer(m); let i = 0; rundgangLauf = m;
-  const weiter = () => { if (rundgangLauf !== m || i >= S.length) { if (rundgangLauf === m) { rundgangLauf = null; melde(T.rundgangEnde || ''); } return; } const st = S[i++]; melde(T.rundgangSchritt ? T.rundgangSchritt.replace('{n}', st.name) : st.name); fahren(st.pos, st.ziel, st.dauer || 4, () => setTimeout(weiter, (st.pause || 1.2) * 1000)); };
+  const weiter = () => { if (rundgangLauf !== m || i >= S.length) { if (rundgangLauf === m) { rundgangLauf = null; melde(T.rundgangEnde || ''); } return; } const st = S[i++]; melde(T.rundgangSchritt ? T.rundgangSchritt.replace('{n}', st.name) : st.name); const nach = () => setTimeout(weiter, (st.pause || 1.6) * 1000), p0 = camera.position.toArray(), weg = Math.hypot(...st.pos.map((v, j) => v - p0[j]));
+    if (strahl(p0, st.pos) < weg) blenden(st.pos, st.ziel, nach); else fahren(st.pos, st.ziel, st.dauer || 3.5, nach); };
   fahren(S[0].pos, S[0].ziel, 2.5, () => { i = 1; melde(S[0].name); setTimeout(weiter, 1200); });
   return true;
 }
@@ -151,6 +163,7 @@ function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) 
 // nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
 function hausWahl() { const m = aktiv, h = m?.haus; if (!h) return; if (!h.geladen) { h.geladen = true; for (const k of h.wohnung) lade(k); }   // Wohnung schon beim Anflug laden, unsichtbar
   const b = h.innen, p = camera.position, kasten = p.x > b[0] && p.x < b[3] && p.y > b[1] && p.y < b[4] && p.z > b[2] && p.z < b[5]; const innen = !!m.schnitt || (!!h.nah && p.length() < h.nah) || kasten;
+  if (camera.isPerspectiveCamera && h.fovInnen && camera.fov !== (kasten ? h.fovInnen : FOV)) { camera.fov = kasten ? h.fovInnen : FOV; camera.updateProjectionMatrix(); }   // in der Wohnung weiter Bildwinkel (4.11.: 38° wirkt in Räumen eng)
   if (innen === m.hausInnen && m.schnitt === m.hausSchnitt && kasten === m.hausKasten) return; m.hausInnen = innen; m.hausSchnitt = m.schnitt; m.hausKasten = kasten;
   for (const k of Object.keys(m.dateien)) zeige(k); for (const o of m.eigenhaus || []) o.visible = !innen;
   // von außen ohne Schnitt: Deckenplatte der Wohnung aus (h.dach = Höhe unter der Platte), darüber liegt das Google-Dach; von innen bleibt die Decke
@@ -174,6 +187,9 @@ function aktiviere(name) {
   aktiv = m; m.wurzel.visible = true;
   scene.fog = m.nebel ? new THREE.Fog(m.nebel[0], m.nebel[1], m.nebel[2]) : null;   // ferne Stadt und Berge verblassen
   const L = m.hell || {}; LICHT.himmel.intensity = L.himmel ?? 1.15; LICHT.himmel.groundColor.set(L.boden ?? 0xb8b8b8); LICHT.sonne.intensity = L.sonne ?? 1.5; LICHT.gegen.intensity = L.gegen ?? 0.5;
+  const Bd = m.bild || {}; renderer.toneMapping = Bd.ton ? THREE.NeutralToneMapping : THREE.NoToneMapping; renderer.toneMappingExposure = Bd.belichtung ?? 1;
+  if (Bd.schatten && !SCHWACH) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; const S = LICHT.sonne; S.castShadow = true; S.position.set(...(Bd.sonne || [300, 500, 200])).normalize().multiplyScalar(80); S.target.position.set(0, 0, 0); scene.add(S.target);
+    const c = S.shadow.camera, r = Bd.schatten; c.left = -r; c.right = r; c.top = r; c.bottom = -r; c.near = 1; c.far = 200; c.updateProjectionMatrix(); S.shadow.mapSize.set(2048, 2048); S.shadow.bias = -0.0004; S.shadow.normalBias = 0.03; S.shadow.radius = 4; }
   KAPPE.color.set(m.schnittFarbe ?? 0x3a3634); SCHNITT.color.set(m.schnittFarbe ?? 0x1c1c1c);   // Schnittflächen: dunkel wie im Plan, Estate weiß (4.11., Tassilo: keine dunklen Flecke)
   for (const b of wrap.querySelectorAll('.m-reiter button')) b.classList.toggle('on', b.dataset.modell === name);
   for (const l of leisten()) l.hidden = l.dataset.leiste !== name;
@@ -190,7 +206,7 @@ function aktiviere(name) {
 function sollSichtbar(k) { const m = aktiv; if (m.zustaende) { const z = m.zustaende[m.zustand]; if (k in z && !z[k]) return false; }
   const h = m.haus; if (h && (k === h.ganz || k === h.schnitt || k === h.offen)) { const w = !m.hausInnen ? h.ganz : h.offen && m.schnitt === 'planta' ? h.offen : h.schnitt; return m.sichtbar.stadt !== false && k === w; }   // folgt dem Schalter Stadt; h.offen: ohne Decke von oben
   if (h && h.wohnung.includes(k) && !m.hausInnen && m.sichtbar.stadt !== false && m.sichtbar[k] !== false) return false;
-  if (h?.nachbarn?.includes(k)) return !!m.hausInnen && !!m.schnitt && m.sichtbar[k] !== false; /* Nachbarwohnungen als Körper nur im Schnitt (sonst steht dort das Google-Haus) */ return m.sichtbar[k === 'kacheln' || k === 'fern' ? 'stadt' : k] !== false; }
+  if (h?.nachbarn?.includes(k)) return !!m.hausInnen && m.sichtbar[k] !== false; /* Nachbarkörper, Lichthofschächte, Geschossplatte: nah immer (4.11.: durch die Hoffenster sonst Google-Reste); der Nachbarkörper bleibt ohne Schnitt unter dem Google-Dach */ return m.sichtbar[k === 'kacheln' || k === 'fern' ? 'stadt' : k] !== false; }
 function zustand(z) { const m = aktiv; if (!m.zustaende?.[z]) return; m.zustand = z; for (const k of Object.keys(m.dateien)) zeige(k); }
 function zeige(k) { const m = aktiv, soll = sollSichtbar(k); if (m.gruppen[k]) m.gruppen[k].visible = soll; else if (soll) lade(k); if (m.baumNetz && m.baeume?.gruppe === k) m.baumNetz.visible = soll; }
 
@@ -204,7 +220,7 @@ async function ladeTiles(m, k, g) {
   if (v) t.preprocessURL = u => { const x = new URL(u, location.href); if (!x.searchParams.has('v')) x.searchParams.set('v', v); return x.href; };
   t.group.rotation.x = -Math.PI / 2; m.eigenhaus ||= new Set();
   t.addEventListener('load-model', ({ scene: s }) => s.traverse(o => {
-    if (!o.isMesh) return; const alt = o.material; o.material = new THREE.MeshBasicMaterial({ map: alt.map, side: THREE.DoubleSide }); alt.dispose(); o.frustumCulled = false;   // Licht steckt im Foto
+    if (!o.isMesh) return; const alt = o.material; o.material = new THREE.MeshBasicMaterial({ map: alt.map, side: THREE.DoubleSide, toneMapped: false }); alt.dispose(); o.frustumCulled = false;   // Licht steckt im Foto
     if (o.name === 'eigenhaus' || o.parent?.name === 'eigenhaus') { m.eigenhaus.add(o); o.visible = !m.hausInnen; }
   }));
   t.addEventListener('dispose-model', ({ scene: s }) => s.traverse(o => m.eigenhaus.delete(o)));
@@ -212,6 +228,15 @@ async function ladeTiles(m, k, g) {
 }
 function kachelnNeu() { const t = aktiv?.tiles; if (!t || !t.group.parent?.visible) return; if (t.kamera !== camera) { if (t.kamera) t.deleteCamera(t.kamera); t.setCamera(camera); t.kamera = camera; } t.setResolutionFromRenderer(camera, renderer); camera.updateMatrixWorld(); t.update(); }
 
+// Bildwirkung wie in Rhino (4.11., Tassilo: „Schatten, Farben abgetönter“): m.bild = { umgebung, rauh, schatten }: PBR-Material mit Umgebungslicht
+// (RoomEnvironment), Normalen mit Knickwinkel (runde Möbel glatt, Kanten scharf), Sonnenschatten; ohne m.bild wie bisher Lambert flach
+function matWohnung(m, o, map) {
+  const B = m.bild; if (!B) return new THREE.MeshLambertMaterial({ map, vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+  const mitN = !!o.geometry.attributes.normal, glatt = mitN || (!SCHWACH && o.geometry.attributes.position.count < 600000);   // Normalen aus dem GLB (web_wohnung_glb.mjs), sonst hier berechnet
+  if (glatt && !mitN) { const g = toCreasedNormals(o.geometry, (B.knick ?? 35) * Math.PI / 180); o.geometry.dispose(); o.geometry = g; }
+  if (B.schatten && !SCHWACH) { o.castShadow = true; o.receiveShadow = true; }
+  return new THREE.MeshStandardMaterial({ map, vertexColors: true, flatShading: !glatt, roughness: B.rauh ?? 0.85, metalness: 0, envMap: UMGEBUNG, envMapIntensity: B.umgebung ?? 0.6, side: THREE.DoubleSide, clipShadows: true, shadowSide: THREE.DoubleSide });
+}
 async function lade(k) {
   const m = aktiv; if (m.gruppen[k]) return;
   const g = m.gruppen[k] = new THREE.Group(); g.visible = true; m.wurzel.add(g);
@@ -221,10 +246,10 @@ async function lade(k) {
     const d = await loader.loadAsync(mitVersion(m.basis + m.dateien[k]));
     const netze = []; d.scene.traverse(o => { if (o.isMesh) netze.push(o); });   // erst sammeln: die Schnittflächen kommen als Kinder dazu
     for (const o of netze) {
-      if (o.material.map && !o.material.name.startsWith('tex:')) { o.material = new THREE.MeshBasicMaterial({ map: o.material.map, side: THREE.DoubleSide }); o.frustumCulled = false; continue; }   // Fotokacheln: das Licht steckt im Foto
+      if (o.material.map && !o.material.name.startsWith('tex:')) { o.material = new THREE.MeshBasicMaterial({ map: o.material.map, side: THREE.DoubleSide, toneMapped: false }); o.frustumCulled = false; continue; }   // Fotokacheln: das Licht steckt im Foto
       if (o.material.map) {   // texturierte Teile (Estate, Rhino-Materialien): beleuchtet, Bild wiederholt sich, geschlossene Körper bekommen Kappen
         const solid = !!o.material.userData?.solid; o.material.map.wrapS = o.material.map.wrapT = THREE.RepeatWrapping; o.material.map.colorSpace = THREE.SRGBColorSpace; o.material.map.anisotropy = 4;
-        o.material = new THREE.MeshLambertMaterial({ map: o.material.map, vertexColors: true, flatShading: true, side: THREE.DoubleSide }); o.frustumCulled = false;   // flatShading: ohne Normalen im GLB sonst schwarz
+        o.material = matWohnung(m, o, o.material.map); o.frustumCulled = false;   // flatShading: ohne Normalen im GLB sonst schwarz
         const kappenGruppe_ = m.kappen ? m.kappen.includes(k) : KAPPEN_GRUPPEN.has(k);
         if (solid && kappenGruppe_) { const s = kappenGruppe(o.geometry); s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }
         if (kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
@@ -233,7 +258,7 @@ async function lade(k) {
       const glas = o.material.name === 'glas', solid = o.material.name === 'solid';   // solid: geschlossene Körper (tools/web_3dm_glb.mjs), nur sie bekommen Kappen
       o.material = glas
         ? new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.04, envMap: UMGEBUNG, envMapIntensity: m.glas?.spiegel ?? 1.35, transparent: true, opacity: m.glas?.deckung ?? 0.58, side: THREE.DoubleSide, depthWrite: false })   // spiegelt, leicht getönt; m.glas (Estate): klarer, damit man die Stadt sieht
-        : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+        : matWohnung(m, o, null);
       o.frustumCulled = false;
       const kappenGruppe_ = m.kappen ? m.kappen.includes(k) : KAPPEN_GRUPPEN.has(k);
       if (solid && kappenGruppe_) { const s = kappenGruppe(o.geometry); s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }
@@ -384,6 +409,8 @@ window.formaZustand = () => { const m = aktiv; if (!m || !camera) return null; c
   return { modell: m.name, sichtbar, zustand: m.zustand || null, schnitt: m.schnitt || 'kein', struktur: (() => { let d = null; m.gruppen.gebaeude?.traverse(o => { if (d === null && o.isMesh && o.material !== SCHNITT && !o.material.userData.glas) d = o.material.opacity; }); return d !== null && d < 0.2; })(), abstand: camera.position.distanceTo(controls.target), hoehe: camera.position.y, status: status?.textContent || '', zuruecksetzen: undefined }; };
 window.formaZustand.zuruecksetzen = () => { tun({ alles: true }); melde(''); };
 window.formaZustand.kamera = (pos, ziel) => kamera(pos, ziel);
+// Prüfregel Rundgang (4.11.): freier Blick von pos Richtung ziel bis zur ersten Fläche der Wohnung, in Metern (Infinity: nichts getroffen)
+window.formaZustand.strahl = (pos, ziel) => strahl(pos, ziel);
 window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
 // Freien Text deuten: Stichwörter in drei Sprachen. Liefert eine Aktion oder null.
 const W = {
