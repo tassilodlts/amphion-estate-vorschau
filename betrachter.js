@@ -10,6 +10,10 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { START as BAU_START, baue, bauLicht } from './bauplatz.js?v=43a2842860';
 
 const wrap = document.querySelector('#modell'); if (!wrap) throw new Error('kein #modell');
@@ -157,7 +161,19 @@ function rundgang(m) {
   fahren(S[0].pos, S[0].ziel, 2.5, () => { i = 1; melde(N(S[0])); setTimeout(weiter, 1200); });
   return true;
 }
-function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); kachelnNeu(); renderer.render(scene, camera); }
+// Umgebungsverschattung (4.11., Tassilo: „in Rhino schöner“, weiche Schatten in Ecken und unter Möbeln): GTAO nur am Rechner, nah, ohne Schnitt
+// (die Verschattung kennt die Schnittebenen nicht) und in Perspektive; sonst direkt
+let NACH = null;
+function zeichnen() {
+  const m = aktiv, A = m?.bild?.ao;
+  if (!A || SCHWACH || m.schnitt || !camera.isPerspectiveCamera || !m.hausInnen) { renderer.render(scene, camera); return; }
+  if (!NACH) { const c = new EffectComposer(renderer), rp = new RenderPass(scene, camera), g = new GTAOPass(scene, camera, canvas.clientWidth, canvas.clientHeight);
+    g.updateGtaoMaterial({ radius: A.radius ?? 0.5, distanceExponent: A.exponent ?? 1.5, thickness: A.dicke ?? 1, scale: A.staerke ?? 1, samples: 16 }); g.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 }); g.blendIntensity = A.mischung ?? 1;
+    g.overrideVisibility = function () { GTAOPass.prototype.overrideVisibility.call(this); this.scene.traverse(o => { if (o.userData.ohneAO) o.visible = false; }); };   // Glas nicht verschatten (sonst schwarze Scheiben)
+    c.addPass(rp); c.addPass(g); c.addPass(new OutputPass()); c.setPixelRatio(renderer.getPixelRatio()); c.setSize(canvas.clientWidth, canvas.clientHeight); NACH = { c, rp, g }; }
+  NACH.rp.camera = camera; NACH.g.camera = camera; NACH.c.render();
+}
+function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); kachelnNeu(); zeichnen(); }
 // Estate (3.11., Tassilo: Dach bleibt, erst im Schnitt zeigen, was aufgeschnitten ist; unsere echten Fenster statt der Google-Fenster; weiter draußen
 // unschärfer wie Google): weit weg (über m.haus.nah Meter) nur die Fotostadt mit dem Google-Haus (Knoten „eigenhaus“ der Kacheln, m.haus.ganz);
 // nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
@@ -173,7 +189,7 @@ function hausWahl() { const m = aktiv, h = m?.haus; if (!h) return; if (!h.gelad
 // Schnitt nur für die Gruppen außerhalb m.ungeschnitten (Estate: die Fotostadt bleibt ganz), darum Ebenen je Material statt am Renderer
 function clipSetzen(m) { for (const [k, g] of Object.entries(m.gruppen)) { const frei = m.ungeschnitten?.includes(k) || m.ungeschnittenBei?.[m.schnitt]?.includes(k); /* Estate: bei „ohne Decke“ bleibt das Google-Haus ganz */ g.traverse(o => { if (o.isMesh && o.material) for (const mat of [].concat(o.material)) mat.clippingPlanes = frei || !m.ebenen?.length ? null : m.ebenen; }); } }
 function groesse() {
-  const w = canvas.clientWidth, h = canvas.clientHeight; renderer.setSize(w, h, false);
+  const w = canvas.clientWidth, h = canvas.clientHeight; renderer.setSize(w, h, false); NACH?.c.setSize(w, h);
   if (camera?.isOrthographicCamera) { const r = camera.userData.r, a = w / h; camera.left = -r * a; camera.right = r * a; camera.top = r; camera.bottom = -r; }
   else if (camera) camera.aspect = w / h;
   camera?.updateProjectionMatrix();
@@ -235,6 +251,7 @@ function matWohnung(m, o, map) {
   const mitN = !!o.geometry.attributes.normal, glatt = mitN || (!SCHWACH && o.geometry.attributes.position.count < 600000);   // Normalen aus dem GLB (web_wohnung_glb.mjs), sonst hier berechnet
   if (glatt && !mitN) { const g = toCreasedNormals(o.geometry, (B.knick ?? 35) * Math.PI / 180); o.geometry.dispose(); o.geometry = g; }
   if (B.schatten && !SCHWACH) { o.castShadow = true; o.receiveShadow = true; }
+  if (B.matt) return new THREE.MeshLambertMaterial({ map, vertexColors: true, flatShading: !glatt, side: THREE.DoubleSide });   // matt wie der Rhino-Viewport (4.11.: Texturen in voller Farbe)
   return new THREE.MeshStandardMaterial({ map, vertexColors: true, flatShading: !glatt, roughness: B.rauh ?? 0.85, metalness: 0, envMap: UMGEBUNG, envMapIntensity: B.umgebung ?? 0.6, side: THREE.DoubleSide, clipShadows: true, shadowSide: THREE.DoubleSide });
 }
 async function lade(k) {
@@ -259,7 +276,7 @@ async function lade(k) {
       o.material = glas
         ? new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.04, envMap: UMGEBUNG, envMapIntensity: m.glas?.spiegel ?? 1.35, transparent: true, opacity: m.glas?.deckung ?? 0.58, side: THREE.DoubleSide, depthWrite: false })   // spiegelt, leicht getönt; m.glas (Estate): klarer, damit man die Stadt sieht
         : matWohnung(m, o, null);
-      o.frustumCulled = false;
+      o.frustumCulled = false; if (glas) o.userData.ohneAO = true;
       const kappenGruppe_ = m.kappen ? m.kappen.includes(k) : KAPPEN_GRUPPEN.has(k);
       if (solid && kappenGruppe_) { const s = kappenGruppe(o.geometry); s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }
       // offene Körper (Wände ohne Deckel, Böden als Fläche) in denselben Gruppen: im Schnitt nur Vorderseiten, Rückseiten dunkel, so wirkt
