@@ -151,8 +151,86 @@ function blenden(pos, ziel, danach) {
   canvas.style.transition = 'opacity .3s'; canvas.style.opacity = '0';
   setTimeout(() => { if (!rundgangLauf) { canvas.style.opacity = '1'; return; } camera.position.set(...pos); controls.target.set(...ziel); camera.lookAt(controls.target); controls.update(); canvas.style.opacity = '1'; setTimeout(() => danach?.(), 350); }, 320);
 }
-function fahrtAbbrechen() { if (fahrt || rundgangLauf) { fahrt = null; rundgangLauf = null; if (controls) { controls.enabled = true; controls.target.copy(controls.target); } } }
+function fahrtAbbrechen() { if (tour) return; if (fahrt || rundgangLauf) { fahrt = null; rundgangLauf = null; if (controls) { controls.enabled = true; controls.target.copy(controls.target); } } }   // im Rundgang zum Selbersteuern bricht Ziehen nichts ab
+// Geführter Rundgang zum Selbersteuern (4.11., Tassilo: „Pfeile, wohin man geht; Pfeil drücken bewegt durch die Wohnung; nicht komplette Freiheit,
+// sonst verliert man sich“): feste Standpunkte, dort nur Umsehen (kein Verschieben, kein Zoom); Bodenmarken zu den Halten, die man von hier sieht;
+// Leiste mit Zurück, Weiter, Türen, Beenden
+let tour = null;
+function tourStarten(m) {
+  const S = m.rundgang; if (!S?.length) return false;
+  if (m.schnitt) schnitt('kein'); if (axo) projektion('persp');
+  tour = { m, i: -1, marken: new THREE.Group() }; m.wurzel.add(tour.marken); tourLeiste(true); if (!tuerenOffen) tueren(); tourGehe(0); return true;   // Türen beim Start offen, sonst sieht man die Nachbarräume nicht
+}
+function tourPfad(i, j) {   // Laufweg zwischen zwei Halten (Grundriss x, z), in Laufrichtung
+  const W = tour?.m.rundgangWege?.wege; if (i == null || !W) return null; const a = W[Math.min(i, j) + '-' + Math.max(i, j)]; return a ? (i < j ? a : [...a].reverse()) : null;
+}
+function laufen(pfad, st, danach) {   // den Weg entlang gehen: je Abschnitt eine kurze Fahrt in Augenhöhe, Blick voraus; am Ende Blick des Halts
+  const y = st.pos[1]; let k = 1;
+  const schritt = () => { if (!tour) return; if (k >= pfad.length) { fahren(st.pos, st.ziel, 0.6, danach); return; }
+    const p = pfad[k], q = pfad[Math.min(k + 1, pfad.length - 1)], d = Math.hypot(p[0] - camera.position.x, p[1] - camera.position.z), r = [q[0] - p[0], q[1] - p[1]], l = Math.hypot(...r) || 1;
+    k++; fahren([p[0], y, p[1]], [p[0] + r[0] / l * 3, y - 0.15, p[1] + r[1] / l * 3], Math.max(0.25, d / 1.6), schritt); };
+  schritt();
+}
+function tourName(st) { return typeof st.name === 'object' ? st.name[sprache()] || st.name.es : st.name; }
+function tourBlick(st) {   // Umsehen am Standpunkt: Drehpunkt 1 cm vor dem Auge, Ziehen dreht den Blick
+  const p = new THREE.Vector3(...st.pos), d = new THREE.Vector3(...st.ziel).sub(p).normalize();
+  controls.target.copy(p).addScaledVector(d, 0.01); controls.enablePan = false; controls.enableZoom = false; controls.rotateSpeed = -0.35; controls.minDistance = 0; controls.maxPolarAngle = Math.PI - 0.05; controls.update();
+}
+function tourGehe(j) {
+  const t = tour; if (!t) return; const S = t.m.rundgang; j = (j + S.length) % S.length; if (j === t.i) return; t.i = j; const st = S[j];
+  for (const c of [...t.marken.children]) { t.marken.remove(c); c.geometry?.dispose(); c.material?.map?.dispose(); c.material?.dispose(); }
+  melde(tourName(st)); tour.leiste?.querySelector('.t-name') && (tour.leiste.querySelector('.t-name').textContent = (j + 1) + ' / ' + S.length + ' · ' + tourName(st));
+  const p0 = camera.position.toArray(), weg = Math.hypot(...st.pos.map((v, k) => v - p0[k])), fertig = () => { tourBlick(st); setTimeout(() => { if (tour?.i === j) tourMarken(); }, 700); };   // Marken nach dem Türschwenk
+  controls.enablePan = false; controls.enableZoom = false;
+  const pfad = tourPfad(t.vorher, j);
+  if (weg < 0.05) fertig(); else if (pfad) laufen(pfad, st, fertig); else if (strahl(p0, st.pos) < weg) { rundgangLauf = t.m; blenden(st.pos, st.ziel, () => { rundgangLauf = null; fertig(); }); } else fahren(st.pos, st.ziel, Math.min(2.6, 0.9 + weg * 0.25), fertig);
+  t.vorher = j;
+}
+function tourMarken() {   // Bodenmarke zu jedem Halt, den man von hier frei sieht (bis 10 m): Ring, Pfeil, Name
+  const t = tour; if (!t) return; const S = t.m.rundgang, hier = S[t.i];
+  const nb = t.m.rundgangWege?.nachbarn?.[t.i];
+  S.forEach((st, k) => {
+    if (k === t.i) return; const a = new THREE.Vector3(...hier.pos); let b = new THREE.Vector3(...st.pos); const d = b.distanceTo(a);
+    if (nb) { if (!nb.includes(k)) return; const p = tourPfad(t.i, k); if (p) { let rest = 1.8; for (let n = 1; n < p.length; n++) { const s0 = p[n - 1], s1 = p[n], l = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]); if (l >= rest) { b = new THREE.Vector3(s0[0] + (s1[0] - s0[0]) * rest / l, 0, s0[1] + (s1[1] - s0[1]) * rest / l); break; } rest -= l; } } }   // Marke 1,8 m den Weg entlang (Tür, Flur)
+    else if (d > 10 || strahl(hier.pos, st.pos) < d - 0.3) return;
+    const g = new THREE.Group(); g.position.set(b.x, 0.03, b.z); g.userData.halt = k;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.26, 0.34, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.renderOrder = 10;
+    const scheibe = new THREE.Mesh(new THREE.CircleGeometry(0.26, 48), new THREE.MeshBasicMaterial({ color: 0x00b4c8, transparent: true, opacity: 0.55, depthTest: false })); scheibe.rotation.x = -Math.PI / 2; scheibe.renderOrder = 10;
+    const pfeil = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.24, 3), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false })); pfeil.rotation.x = -Math.PI / 2; pfeil.position.y = 0.01; pfeil.renderOrder = 11;
+    const w = Math.atan2(b.x - a.x, b.z - a.z); const dreh = new THREE.Group(); dreh.rotation.y = w; dreh.add(pfeil); g.add(scheibe, ring, dreh);
+    const c = document.createElement('canvas'); c.width = 512; c.height = 96; const x = c.getContext('2d'); x.font = 'bold 44px Helvetica, Arial, sans-serif'; const tw = x.measureText(tourName(st)).width;
+    x.fillStyle = 'rgba(255,255,255,.92)'; x.fillRect(256 - tw / 2 - 18, 12, tw + 36, 70); x.fillStyle = '#111'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(tourName(st), 256, 48);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true, sizeAttenuation: false })); sp.scale.set(0.2, 0.0375, 1); sp.position.y = 0.45;   // feste Bildschirmgröße, nah nicht riesig sp.renderOrder = 12; g.add(sp);
+    g.traverse(o => { o.userData.halt = k; }); t.marken.add(g);
+  });
+}
+function tourLeiste(an) {
+  const b = wrap.querySelector('.m-buehne'); tour?.leiste?.remove(); if (!an) return; const T = SAGT_TOUR[sprache()] || SAGT_TOUR.es;
+  const l = document.createElement('div'); l.className = 'm-tour';
+  l.innerHTML = `<button type="button" data-t="zurueck" aria-label="${T.zurueck}">‹ <span class="t-wort">${T.zurueck}</span></button><span class="t-name"></span><button type="button" data-t="weiter"><span class="t-wort">${T.weiter}</span> ›</button><button type="button" data-t="tueren">${T.tueren}</button><button type="button" data-t="ende" aria-label="${T.ende}">×</button>`;
+  l.addEventListener('click', e => { const k = e.target.closest('button')?.dataset.t; if (!k || !tour) return; e.stopPropagation();
+    if (k === 'weiter') tourGehe(tour.i + 1); if (k === 'zurueck') tourGehe(tour.i - 1); if (k === 'tueren') tueren(); if (k === 'ende') tourEnde(); });
+  b.append(l); tour.leiste = l;
+}
+function tourEnde() {
+  const t = tour; if (!t) return; t.m.wurzel.remove(t.marken); tourLeiste(false); tour = null; rundgangLauf = null; fahrt = null;
+  controls.enablePan = true; controls.enableZoom = true; controls.rotateSpeed = 1; controls.minDistance = t.m.nahst; controls.maxPolarAngle = Math.PI / 2 - 0.02; blick(t.m.start); melde('');
+}
+const SAGT_TOUR = { es: { zurueck: 'Anterior', weiter: 'Siguiente', tueren: 'Puertas', ende: 'Salir del recorrido' }, en: { zurueck: 'Previous', weiter: 'Next', tueren: 'Doors', ende: 'Leave the walk' }, de: { zurueck: 'Zurück', weiter: 'Weiter', tueren: 'Türen', ende: 'Rundgang beenden' } };
+let tuerenOffen = false;
+function tueren() {   // Türblätter (Gruppe „tueren“, je Tür ein Knoten mit userData.angel) um ihre Angel drehen; ohne eigene Türgruppe nur Meldung
+  const g = aktiv.gruppen.tueren; tuerenOffen = !tuerenOffen; if (!g) return;
+  g.traverse(o => { const a = o.userData.angel; if (!a) return; o.userData.ziel = tuerenOffen ? a.winkel : 0; });
+}
+// Tipp auf eine Bodenmarke: dorthin gehen (nur ein Tipp, kein Ziehen)
+{ let ab = null; canvas.addEventListener('pointerdown', e => { ab = [e.clientX, e.clientY]; });
+  canvas.addEventListener('pointerup', e => { if (!tour || !ab || Math.hypot(e.clientX - ab[0], e.clientY - ab[1]) > 6) return; const r = canvas.getBoundingClientRect(), ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), camera); const h = ray.intersectObjects(tour.marken.children, true)[0];
+    if (h && h.object.userData.halt != null) tourGehe(h.object.userData.halt); }); }
 function rundgang(m) {
+  return tourStarten(m);
+}
+function rundgangAlt(m) {
   const S = m.rundgang; if (!S?.length) return false;
   if (m.schnitt) schnitt('kein'); if (axo) projektion('persp');
   const T = sagtFuer(m), N = st => typeof st.name === 'object' ? st.name[sprache()] || st.name.es : st.name; let i = 0; rundgangLauf = m;   // Namen je Sprache (4.11.)
@@ -173,7 +251,12 @@ function zeichnen() {
     c.addPass(rp); c.addPass(g); c.addPass(new OutputPass()); c.setPixelRatio(renderer.getPixelRatio()); c.setSize(canvas.clientWidth, canvas.clientHeight); NACH = { c, rp, g }; }
   NACH.rp.camera = camera; NACH.g.camera = camera; NACH.c.render();
 }
-function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); kachelnNeu(); zeichnen(); }
+// Nahebene mit dem Abstand (4.11., Tassilo: „die Karte flimmert in der Ferne, auch unser Gebäude“): 5 cm bis 14 km mit fester Nahebene lässt der
+// Tiefenpuffer aus der Ferne Flächen springen; nah an der Wohnung 5 cm, weit draußen bis 20 m
+function nahebene() { const m = aktiv; if (!camera?.isPerspectiveCamera || !controls) return; const z = Math.min(20, Math.max(m.nah ?? 0.05, camera.position.distanceTo(controls.target) * 0.01));
+  if (Math.abs(z - camera.near) > camera.near * 0.15) { camera.near = z; camera.updateProjectionMatrix(); } }
+function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); nahebene(); tuerenBewegen(); kachelnNeu(); zeichnen(); }
+function tuerenBewegen() { aktiv?.gruppen.tueren?.traverse(o => { const a = o.userData.angel; if (!a) return; const z = o.userData.ziel ?? 0; if (Math.abs(z - o.rotation.y) > 0.001) o.rotation.y += (z - o.rotation.y) * 0.12; }); }
 // Estate (3.11., Tassilo: Dach bleibt, erst im Schnitt zeigen, was aufgeschnitten ist; unsere echten Fenster statt der Google-Fenster; weiter draußen
 // unschärfer wie Google): weit weg (über m.haus.nah Meter) nur die Fotostadt mit dem Google-Haus (Knoten „eigenhaus“ der Kacheln, m.haus.ganz);
 // nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
@@ -219,7 +302,9 @@ function aktiviere(name) {
   if (m.bau && !m.teile) { let g = null; try { g = JSON.parse(localStorage.getItem('amphion.bau') || 'null'); } catch { /* ohne Speicher */ } setzeBau(Array.isArray(g) && g.length ? g : BAU_START, false); }
 }
 // Sichtbar ist eine Gruppe, wenn ihr Schalter an ist; Gruppen des Zustands folgen dem Zustand
-function sollSichtbar(k) { const m = aktiv; if (m.zustaende) { const z = m.zustaende[m.zustand]; if (k in z && !z[k]) return false; }
+function sollSichtbar(k) { const m = aktiv;
+  if (k === 'barrio') return !!m.barrioAn;   // El barrio: abstrakte Stadt statt Fotostadt und Wohnung
+  if (m.barrioAn && (k === 'stadt' || k === 'kacheln' || k === m.haus?.schnitt || k === m.haus?.offen || m.haus?.wohnung.includes(k) || m.haus?.nachbarn?.includes(k))) return false; if (m.zustaende) { const z = m.zustaende[m.zustand]; if (k in z && !z[k]) return false; }
   const h = m.haus; if (h && (k === h.ganz || k === h.schnitt || k === h.offen)) { const w = !m.hausInnen ? h.ganz : h.offen && m.schnitt === 'planta' ? h.offen : h.schnitt; return m.sichtbar.stadt !== false && k === w; }   // folgt dem Schalter Stadt; h.offen: ohne Decke von oben
   if (h && h.wohnung.includes(k) && !m.hausInnen && m.sichtbar.stadt !== false && m.sichtbar[k] !== false) return false;
   if (h?.nachbarn?.includes(k)) return !!m.hausInnen && m.sichtbar[k] !== false; /* Nachbarkörper, Lichthofschächte, Geschossplatte: nah immer (4.11.: durch die Hoffenster sonst Google-Reste); der Nachbarkörper bleibt ohne Schnitt unter dem Google-Dach */ return m.sichtbar[k === 'kacheln' || k === 'fern' ? 'stadt' : k] !== false; }
@@ -284,6 +369,7 @@ async function lade(k) {
       if (!glas && !kappenGruppe_ && !m.ohneSchnittflaechen?.includes(k)) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }   // wie bisher (Hochhaus: rote Tragwerksflächen in der Strukturansicht)
       if (!glas && kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
     }
+    d.scene.traverse(o => { const t = /^tuer\|(-?\d+)/.exec(o.name); if (t) o.userData.angel = { winkel: +t[1] * Math.PI / 180 }; });   // Türflügel (tools/stadt_tueren.mjs): Drehpunkt = Angel
     g.add(d.scene); g.visible = m === aktiv ? sollSichtbar(k) : true;
     if (m.versatz?.[k]) g.position.set(...m.versatz[k]);   // z. B. Stadt: Straßenniveau unter dem Wohnungsgeschoss
     if (m.ebenen?.length) clipSetzen(m);   // nachgeladene Gruppe in den laufenden Schnitt
@@ -402,7 +488,10 @@ function tun(a) {
   const m = aktiv;
   if (a.rueck && m.bau) { const v = m.verlauf?.pop(); if (v) { setzeBau(v, false); return T.rueck; } return T.nichtsRueck; }
   if (a.neu && m.bau) { setzeBau(BAU_START); blick(m.start); return T.neu; }
+  if (a.barrio) { if (tour) tourEnde(); barrio(true); return ''; }
+  if (m.barrioAn && (a.alles || a.blick || a.schnitt || a.rundgang)) barrio(false);
   if (a.rundgang) return rundgang(m) ? (T.rundgangStart || '') : T.unklar;
+  if (tour && (a.alles || a.blick || a.schnitt || a.kamera)) tourEnde();
   if (a.alles) { fahrtAbbrechen(); m.zustand = '2026'; for (const k of Object.keys(m.dateien)) m.sichtbar[k] = true; axo = false; blick(m.start); schnitt(m.schnittStart || 'kein'); for (const k of Object.keys(m.dateien)) zeige(k); return T.alles; }
   if (a.zustand && m.zustaende?.[String(a.zustand)]) { zustand(String(a.zustand)); gesagt.push(T.zustand[a.zustand]); }
   if (a.gruppen) { const an = [], aus = []; for (const [k, v] of Object.entries(a.gruppen)) { if (!(k in m.dateien) || k === 'kacheln' || k === 'fern') continue; m.sichtbar[k] = !!v; zeige(k); if (k === 'stadt') for (const kk of Object.keys(m.dateien)) zeige(kk); (v ? an : aus).push(T.gruppen[k] || k); }
@@ -428,7 +517,68 @@ window.formaZustand.zuruecksetzen = () => { tun({ alles: true }); melde(''); };
 window.formaZustand.kamera = (pos, ziel) => kamera(pos, ziel);
 // Prüfregel Rundgang (4.11.): freier Blick von pos Richtung ziel bis zur ersten Fläche der Wohnung, in Metern (Infinity: nichts getroffen)
 window.formaZustand.strahl = (pos, ziel) => strahl(pos, ziel);
+// Prüfhilfe (4.11.): welches Objekt trifft ein Strahl von pos Richtung ziel (alle sichtbaren Netze, auch Fotostadt): Name, Eltern, Gruppe, Kachel
+window.formaZustand.treffer = (pos, ziel) => { const o = new THREE.Vector3(...pos), r = new THREE.Raycaster(o, new THREE.Vector3(...ziel).sub(o).normalize(), 0.05, 400), z = [];
+  scene.traverseVisible(x => { if (x.isMesh) z.push(x); }); const h = r.intersectObjects(z, false)[0]; if (!h) return null; const kette = []; let x = h.object; while (x) { kette.push(x.name || x.type); x = x.parent; }
+  const g = Object.entries(aktiv.gruppen).find(([, gr]) => { let y = h.object; while (y) { if (y === gr) return true; y = y.parent; } return false; })?.[0];
+  return { abstand: +h.distance.toFixed(2), gruppe: g, kette: kette.slice(0, 6), punkt: h.point.toArray().map(v => +v.toFixed(2)) }; };
+window.formaZustand.tour = () => tour ? { halt: tour.i, marken: tour.marken.children.length } : null;
+window.formaZustand.tourGehe = j => tourGehe(j);
 window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
+// El barrio (4.11., Tassilo: „Madrid abstrahiert, Häuser als Blöcke aus dem Kataster, Supermärkte, Parks, Spielplätze, Metro, Bus, Züge, Flughafen,
+// und wie lange man zu Fuß braucht“): Kataster-Blöcke (barrio.glb), Gehzonen 5/10/15 min, Orte mit Symbol und Minuten, Liste mit Sätzen; Tipp auf eine
+// Kategorie zeichnet den Fußweg zum nächsten Ziel. Daten: tools/stadt_barrio_daten.py (Catastro, OpenStreetMap), Wegzeiten über das Fußwegenetz.
+const KAT = { metro: ['🚇', 'Metro', 'Metro', 'Metro'], cercanias: ['🚆', 'Cercanías', 'Commuter train', 'S-Bahn'], bus: ['🚌', 'Autobús', 'Bus', 'Bus'], bici: ['🚲', 'BiciMAD', 'BiciMAD', 'BiciMAD'],
+  super: ['🛒', 'Supermercado', 'Supermarket', 'Supermarkt'], mercado: ['🧺', 'Mercado', 'Market', 'Markthalle'], panaderia: ['🥖', 'Panadería', 'Bakery', 'Bäckerei'], farmacia: ['💊', 'Farmacia', 'Pharmacy', 'Apotheke'],
+  colegio: ['🏫', 'Colegio', 'School', 'Schule'], guarderia: ['🧸', 'Escuela infantil', 'Nursery', 'Kita'], universidad: ['🎓', 'Universidad', 'University', 'Universität'],
+  salud: ['🏥', 'Hospital o clínica', 'Hospital or clinic', 'Klinik'], medico: ['🩺', 'Médico', 'Doctor', 'Arzt'], parque: ['🌳', 'Parque', 'Park', 'Park'], juegos: ['🛝', 'Parque infantil', 'Playground', 'Spielplatz'],
+  perros: ['🐕', 'Zona canina', 'Dog park', 'Hundewiese'], gimnasio: ['🏋️', 'Gimnasio', 'Gym', 'Fitness'], piscina: ['🏊', 'Piscina', 'Pool', 'Schwimmbad'], cultura: ['🎭', 'Cultura', 'Culture', 'Kultur'],
+  restaurante: ['🍽️', 'Restaurante', 'Restaurant', 'Restaurant'], cafe: ['☕', 'Café', 'Café', 'Café'], banco: ['🏦', 'Banco', 'Bank', 'Bank'], correos: ['✉️', 'Correos', 'Post office', 'Post'],
+  parking: ['🅿️', 'Parking', 'Car park', 'Parkhaus'], carga: ['🔌', 'Carga eléctrica', 'EV charging', 'Ladesäule'] };
+const KAT_FOLGE = ['metro', 'bus', 'cercanias', 'super', 'mercado', 'panaderia', 'farmacia', 'colegio', 'guarderia', 'parque', 'juegos', 'medico', 'salud', 'gimnasio', 'piscina', 'cultura', 'restaurante', 'cafe', 'bici', 'parking', 'carga', 'banco', 'correos', 'perros', 'universidad'];
+const BT = { es: { titel: 'A pie desde la puerta', min: 'min', km: 'km', zonen: 'Zonas a pie: 5, 10 y 15 min', aero: 'Aeropuerto de Barajas', tren: 'Estación', satz: (a) => a.join(' · '), quelle: 'Datos: Catastro, © OpenStreetMap' },
+  en: { titel: 'On foot from the front door', min: 'min', km: 'km', zonen: 'Walking zones: 5, 10 and 15 min', aero: 'Barajas Airport', tren: 'Station', satz: (a) => a.join(' · '), quelle: 'Data: Catastro, © OpenStreetMap' },
+  de: { titel: 'Zu Fuß von der Haustür', min: 'Min.', km: 'km', zonen: 'Gehzonen: 5, 10 und 15 Min.', aero: 'Flughafen Barajas', tren: 'Bahnhof', satz: (a) => a.join(' · '), quelle: 'Daten: Catastro, © OpenStreetMap' } };
+async function barrio(an) {
+  const m = aktiv; m.barrioAn = an; for (const k of Object.keys(m.dateien)) zeige(k); if (m.barrioEbene) m.barrioEbene.visible = an; wrap.querySelector('.m-barrio')?.toggleAttribute('hidden', !an);
+  if (!an) { barrioWeg(null); return; }
+  if (axo) projektion('persp'); if (m.schnitt) schnitt('kein');
+  kamera([260, 330, 380], [0, -21, 0]);
+  if (m.barrioDaten) return;
+  try { m.barrioDaten = await (await fetch(mitVersion(m.basis + 'barrio.json'))).json(); } catch (e) { console.error(e); return; }
+  const D = m.barrioDaten, Y = D.strasse, G = m.barrioEbene = new THREE.Group(); m.wurzel.add(G); const sp = sprache(), li = { es: 1, en: 2, de: 3 }[sp] || 1;
+  // Gehzonen
+  const farben = { 5: 0x00b4c8, 10: 0x5fc7d3, 15: 0xa9dde3 };
+  for (const mi of [15, 10, 5]) { const z = D.zonen[mi]; if (!z) continue; const f = new THREE.Shape(z.map(([x, y]) => new THREE.Vector2(x, y)));
+    const fl = new THREE.Mesh(new THREE.ShapeGeometry(f), new THREE.MeshBasicMaterial({ color: farben[mi], transparent: true, opacity: 0.13, depthWrite: false, side: THREE.DoubleSide })); fl.rotation.x = -Math.PI / 2; fl.position.y = Y + 0.2 + mi * 0.01; G.add(fl);
+    const lg = new THREE.BufferGeometry().setFromPoints(z.concat([z[0]]).map(([x, y]) => new THREE.Vector3(x, Y + 0.4, -y))); G.add(new THREE.Line(lg, new THREE.LineBasicMaterial({ color: farben[mi] }))); }
+  // Orte: Symbol und Minuten, feste Bildschirmgröße; je Kategorie die nächsten
+  const schild = (txt, hervor) => { const c = document.createElement('canvas'); c.width = 256; c.height = 96; const x = c.getContext('2d'); x.fillStyle = hervor ? '#00b4c8' : 'rgba(255,255,255,.95)'; x.beginPath(); x.roundRect(4, 8, 248, 80, 40); x.fill(); x.font = '48px "Apple Color Emoji","Segoe UI Emoji",sans-serif'; x.textBaseline = 'middle'; x.fillText(txt[0], 22, 50); x.font = 'bold 36px Helvetica, Arial, sans-serif'; x.fillStyle = hervor ? '#fff' : '#111'; x.fillText(txt[1], 92, 52); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true, sizeAttenuation: false })); };
+  m.barrioOrte = {};
+  for (const [k, L] of Object.entries(D.orte)) { const def = KAT[k]; if (!def) continue; m.barrioOrte[k] = [];
+    for (const [i, o] of L.slice(0, k === 'restaurante' || k === 'cafe' || k === 'bus' ? 3 : 5).entries()) { const s = schild([def[0], o.min + ' ' + BT[sp].min], false); s.scale.set(0.085, 0.032, 1); s.position.set(o.x, Y + 26 + (i % 3) * 4, -o.y); s.renderOrder = 20; s.userData.kat = k; G.add(s); m.barrioOrte[k].push(s);
+      const pin = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(o.x, Y, -o.y), new THREE.Vector3(o.x, Y + 24 + (i % 3) * 4, -o.y)]), new THREE.LineBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.5 })); G.add(pin); } }
+  // Haustür
+  const tuer = schild(['🏠', ''], true); tuer.scale.set(0.05, 0.032, 1); tuer.position.set(0, Y + 40, 0); tuer.renderOrder = 21; G.add(tuer);
+  barrioListe(D, li);
+}
+function barrioWeg(k) {   // Fußweg zum nächsten Ziel der Kategorie, andere Kategorien blasser
+  const m = aktiv; m.barrioWegNetz && m.barrioEbene?.remove(m.barrioWegNetz); m.barrioWegNetz = null;
+  for (const [kk, L] of Object.entries(m.barrioOrte || {})) for (const s of L) s.material.opacity = !k || kk === k ? 1 : 0.25;
+  const o = k && m.barrioDaten?.orte[k]?.[0]; if (!o?.weg) return; const Y = m.barrioDaten.strasse;
+  const pts = o.weg.map(([x, y]) => new THREE.Vector3(x, Y + 1.2, -y)); const kurve = new THREE.CurvePath(); for (let i = 1; i < pts.length; i++) kurve.add(new THREE.LineCurve3(pts[i - 1], pts[i]));
+  m.barrioWegNetz = new THREE.Mesh(new THREE.TubeGeometry(kurve, Math.max(8, pts.length * 3), 2.2, 6, false), new THREE.MeshBasicMaterial({ color: 0x00b4c8 })); m.barrioEbene.add(m.barrioWegNetz);
+  const ziel = new THREE.Vector3(o.x, Y, -o.y), mitte = ziel.clone().multiplyScalar(0.5); fahren([mitte.x + 140, Y + 260, mitte.z + 200], [mitte.x, Y, mitte.z], 1.6);
+}
+function barrioListe(D, li) {
+  const b = wrap.querySelector('.m-buehne'); let p = wrap.querySelector('.m-barrio'); if (!p) { p = document.createElement('div'); p.className = 'm-barrio'; b.after(p); }
+  const sp = sprache(), B = BT[sp], zeilen = [];
+  for (const k of KAT_FOLGE) { const o = D.orte[k]?.[0]; if (!o) continue; const def = KAT[k]; zeilen.push(`<button type="button" data-kat="${k}"><span class="b-sym">${def[0]}</span><span class="b-was">${def[li]}${o.n ? ' · ' + o.n : ''}${o.linea ? ' (' + o.linea + ')' : ''}</span><b>${o.min} ${B.min}</b></button>`); }
+  const fern = (D.fern || []).filter((f, i, a) => a.findIndex(g => g.k === f.k && (g.k === 'aeropuerto' || g.n === f.n)) === i).map(f => `<span class="b-fern">${f.k === 'aeropuerto' ? '✈️ ' + B.aero : '🚄 ' + f.n} · ${f.km} ${B.km}</span>`).join('');
+  p.innerHTML = `<p class="b-titel">${B.titel}</p><div class="b-liste">${zeilen.join('')}</div><p class="b-fern-zeile">${fern}</p><p class="b-hinweis">${B.zonen} · ${B.quelle}</p>`;
+  p.onclick = e => { const k = e.target.closest('[data-kat]')?.dataset.kat; if (!k) return; for (const x of p.querySelectorAll('[data-kat]')) x.classList.toggle('on', x.dataset.kat === k); barrioWeg(k); };
+}
+
 // Freien Text deuten: Stichwörter in drei Sprachen. Liefert eine Aktion oder null.
 const W = {
   neg: /\b(ohne|weg|aus\b|raus\b|lösch|losch|entfern|versteck|ausblend|nicht|kein|delete|without|hide|remove|no\b|sin\b|quita|oculta|fuera)/i,

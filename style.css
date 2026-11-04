@@ -19,7 +19,7 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 
 /* Kopf */
 .kopf{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--linie);display:flex;align-items:center;gap:28px;padding:14px var(--rand)}
-.logo{font-weight:700;font-size:24px;letter-spacing:-.03em;text-decoration:none}
+.logo{font-weight:700;font-size:22px;letter-spacing:-.03em;text-decoration:none;white-space:nowrap}   /* 4.11.: am Handy einzeilig */
 .logo em{font-style:normal;color:var(--akzent)}
 .menu{display:none;gap:24px;margin-left:auto}
 .menu a{text-decoration:none;font-size:16px;color:var(--grau)}
@@ -29,10 +29,10 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 .kontakt:hover{background:var(--akzent-dunkel)}
 
 /* Held */
-.held{padding-top:96px;padding-bottom:36px}
-.held h1{font-size:clamp(42px,7.5vw,104px);letter-spacing:-.04em;line-height:.98;max-width:16ch}
+.held{padding-top:56px;padding-bottom:36px;display:grid;gap:28px;align-items:center}
+.held h1{font-size:clamp(38px,6vw,84px);letter-spacing:-.04em;line-height:.98;max-width:14ch}
 .held h1 em{font-style:normal;color:var(--akzent)}
-.held-text{font-size:clamp(19px,2.2vw,26px);color:var(--grau);max-width:36ch;margin:32px 0 36px;line-height:1.35}
+.held-text{font-size:clamp(18px,1.8vw,23px);color:var(--grau);max-width:34ch;margin:22px 0 26px;line-height:1.35}
 .knoepfe{display:flex;flex-wrap:wrap;gap:12px}
 .knopf{display:inline-block;text-align:center;text-decoration:none;font-weight:700;font-size:17px;padding:16px 26px;border:2px solid var(--ink);background:var(--bg);color:var(--ink)}
 .knopf:hover{background:var(--ink);color:#fff}
@@ -108,3 +108,83 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
   .ablauf ol{grid-template-columns:repeat(3,1fr)}
 }
 @media (min-width:1100px){.lieferung .raster{grid-template-columns:repeat(3,1fr)}.lieferung figure.breit{grid-column:span 2}}
+
+/* 4.11. Umbau für den Wunschkunden (Bericht Estate_Wunschkunde_und_Seite): Sprachwahl, Vorher/Nachher-Regler, Vorteile, Wertrechnung, Fragen, Anfrage */
+.sprachen{display:flex;gap:2px;margin-left:auto}
+.menu+.sprachen{margin-left:12px}
+.sprachen a{font-size:12px;font-weight:700;padding:5px 6px;color:var(--hell);text-decoration:none}
+.sprachen a.on{color:var(--ink)}
+.sprachen+.kontakt{margin-left:8px}
+.vergleich{position:relative;overflow:hidden;aspect-ratio:3/2;background:#eee;user-select:none;-webkit-user-select:none;--p:50%}
+.vergleich img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.vergleich .v-oben{position:absolute;inset:0;clip-path:inset(0 calc(100% - var(--p)) 0 0)}
+.vergleich .v-strich{position:absolute;top:0;bottom:0;left:var(--p);width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 6px rgba(0,0,0,.35);pointer-events:none}
+.vergleich .v-strich::after{content:"‹ ›";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px;border-radius:50%;background:#fff;color:var(--ink);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.vergleich input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0;touch-action:pan-y}
+.v-marke{position:absolute;bottom:10px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:rgba(255,255,255,.88);padding:4px 8px;pointer-events:none}
+.v-marke.links{left:10px}.v-marke.rechts{right:10px}
+.vorteile{display:grid;grid-template-columns:1fr;gap:18px;padding-top:24px!important;padding-bottom:24px!important}
+.vorteile b{color:var(--akzent);font-size:14px}
+.vorteile h3{margin:4px 0 4px}
+.vorteile p{color:var(--grau);font-size:16px}
+.m-kopf{color:var(--grau);max-width:60ch;margin-bottom:14px}
+.m-chips.haupt button{font-size:15px;font-weight:700;padding:10px 14px;border-color:var(--ink)}
+.m-chips.haupt button.klein{font-weight:400;border-color:var(--linie)}
+.m-mehr{margin:14px 0 4px}
+.m-mehr summary{cursor:pointer;color:var(--grau);font-size:15px;margin-bottom:10px}
+.vergleiche .v-raster{display:grid;grid-template-columns:1fr;gap:24px}
+.vergleiche figcaption{margin-top:8px;font-weight:700}
+.liste{list-style:none;margin:0 0 28px;display:grid;gap:10px;max-width:70ch}
+.liste li{padding-left:22px;position:relative;color:var(--grau)}
+.liste li::before{content:"";position:absolute;left:0;top:.6em;width:10px;height:2px;background:var(--akzent)}
+.liste b{color:var(--ink)}
+.wert-raster{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 14px}
+.wert-raster div{border:1px solid var(--linie);padding:16px}
+.wert-raster span{display:block;color:var(--grau);font-size:14px}
+.wert-raster b{font-size:clamp(24px,3vw,36px);letter-spacing:-.02em}
+.wert-raster .hervor{grid-column:1/-1;border-color:var(--akzent);background:#f2fbfc}
+.karte .fuer{color:var(--grau);font-size:15px;margin:-8px 0 14px}
+.karte .abzeichen{display:inline-block;background:var(--akzent);color:#fff;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;margin-bottom:10px}
+.fragen details{border-top:1px solid var(--linie);padding:14px 0}
+.fragen summary{cursor:pointer;font-weight:700;font-size:18px}
+.fragen details p{color:var(--grau);margin-top:8px;max-width:65ch}
+.kontaktab .lead{margin:0 auto 22px}
+.anfrage{display:grid;gap:12px;max-width:520px;margin:0 auto 22px;text-align:left}
+.anfrage label span{display:block;font-size:14px;color:var(--grau);margin-bottom:4px}
+.anfrage input{width:100%;font:inherit;font-size:17px;padding:12px 14px;border:2px solid var(--ink)}
+.kanaele{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;align-items:center}
+.wa-fest{position:fixed;right:16px;bottom:16px;z-index:6;width:56px;height:56px;border-radius:50%;background:#25d366;color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.wa-fest[hidden],.kanaele [hidden]{display:none}
+@media (min-width:760px){
+  .vorteile{grid-template-columns:repeat(3,1fr)}
+  .vergleiche .v-raster{grid-template-columns:1fr 1fr}
+  .wert-raster{grid-template-columns:repeat(3,1fr)}
+}
+@media (min-width:1000px){.held{grid-template-columns:5fr 6fr}}
+.m-reiter[hidden]{display:none}
+@media (max-width:759px){
+  .kopf{gap:10px;padding:12px 16px}
+  .logo{font-size:19px}
+  .kontakt{padding:7px 10px;font-size:13px}
+  .sprachen a{padding:5px 4px}
+}
+/* Rundgang zum Selbersteuern (4.11.): Leiste unten im Bild */
+.m-tour{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.94);padding:6px;box-shadow:0 2px 12px rgba(0,0,0,.18);max-width:calc(100% - 24px)}
+.m-tour button{font:inherit;font-size:15px;font-weight:700;border:1px solid var(--ink);background:#fff;color:var(--ink);min-width:40px;height:40px;padding:0 12px;cursor:pointer}
+.m-tour button[data-t="weiter"]{background:var(--ink);color:#fff}
+.m-tour .t-name{font-size:14px;font-weight:700;padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw}
+.m-tour button{font-size:16px}
+@media (max-width:620px){.m-tour .t-wort{display:none}.m-tour .t-name{max-width:34vw}}
+.m-tour button{white-space:nowrap}
+/* El barrio (4.11.): Liste unter dem Bild, je Kategorie das nächste Ziel mit Fußweg in Minuten */
+.m-barrio{max-width:min(100%,calc(100svh - 120px));margin:12px auto 0}
+.m-barrio[hidden]{display:none}
+.m-barrio .b-titel{font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--akzent);margin-bottom:8px}
+.m-barrio .b-liste{display:grid;grid-template-columns:1fr;gap:4px}
+.m-barrio button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;font-size:15px;padding:8px 10px;border:1px solid var(--linie);background:#fff;cursor:pointer}
+.m-barrio button.on{border-color:var(--akzent);background:#f2fbfc}
+.m-barrio .b-sym{font-size:20px;width:26px;text-align:center}
+.m-barrio .b-was{flex:1;color:var(--grau)}
+.m-barrio .b-fern-zeile{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:15px}
+.m-barrio .b-hinweis{font-size:13px;color:var(--hell);margin-top:6px}
+@media (min-width:760px){.m-barrio .b-liste{grid-template-columns:1fr 1fr}}
