@@ -14,6 +14,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 import { START as BAU_START, baue, bauLicht } from './bauplatz.js?v=43a2842860';
 
 const wrap = document.querySelector('#modell'); if (!wrap) throw new Error('kein #modell');
@@ -153,6 +154,33 @@ function blenden(pos, ziel, danach) {
   setTimeout(() => { if (!rundgangLauf) { canvas.style.opacity = '1'; return; } camera.position.set(...pos); controls.target.set(...ziel); camera.lookAt(controls.target); controls.update(); canvas.style.opacity = '1'; setTimeout(() => danach?.(), 350); }, 320);
 }
 function fahrtAbbrechen() { if (tour) return; if (fahrt || rundgangLauf) { fahrt = null; rundgangLauf = null; if (controls) { controls.enabled = true; controls.target.copy(controls.target); } } }   // im Rundgang zum Selbersteuern bricht Ziehen nichts ab
+// Spiegel (4.11., Tassilo: „Spiegel mit Spiegeltextur“): je Spiegelkörper (Gruppe „spiegel“, web_wohnung_glb spiegelNamen=) eine spiegelnde Fläche auf
+// der Raumseite (die Seite, auf der bis 40 cm keine Wand ist); am Rechner echte Spiegelung (Reflector), am Handy glänzend mit Umgebungsbild
+async function spiegelBauen(m, netze) {
+  for (let i = 0; i < 100 && !m.gruppen.architektur?.children.length; i++) await new Promise(r => setTimeout(r, 200));
+  for (const o of netze) {
+    o.updateWorldMatrix(true, false); const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry, P = g.attributes.position, n = P.count / 3, wurzel = [...Array(n).keys()], w = i => wurzel[i] === i ? i : (wurzel[i] = w(wurzel[i])), ecke = {};
+    for (let t = 0; t < n; t++) for (let j = 0; j < 3; j++) { const v = new THREE.Vector3().fromBufferAttribute(P, t * 3 + j).applyMatrix4(o.matrixWorld), key = v.toArray().map(x => Math.round(x * 200)).join(); if (ecke[key] != null) wurzel[w(t)] = w(ecke[key]); else ecke[key] = t; }
+    const teile = {}; for (let t = 0; t < n; t++) (teile[w(t)] ||= []).push(t);
+    for (const T of Object.values(teile)) {
+      const b = new THREE.Box3(); for (const t of T) for (let j = 0; j < 3; j++) b.expandByPoint(new THREE.Vector3().fromBufferAttribute(P, t * 3 + j).applyMatrix4(o.matrixWorld));
+      const gr = b.getSize(new THREE.Vector3()), c = b.getCenter(new THREE.Vector3()), ax = gr.x < gr.z ? 'x' : 'z', breite = ax === 'x' ? gr.z : gr.x; if (breite < 0.15 || gr.y < 0.15) continue;
+      const frei = sg => { const d = new THREE.Vector3(); d[ax] = sg; const h = new THREE.Raycaster(c.clone().addScaledVector(d, gr[ax] / 2 + 0.01), d, 0, 0.4).intersectObject(m.gruppen.architektur, true)[0]; return h ? h.distance : 1; };
+      const sg = frei(1) >= frei(-1) ? 1 : -1, nrm = new THREE.Vector3(); nrm[ax] = sg;
+      const geo = new THREE.PlaneGeometry(breite, gr.y), f = SCHWACH ? new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0xdfe3e3, metalness: 1, roughness: 0.04, envMap: UMGEBUNG, envMapIntensity: 1 }))
+        : new Reflector(geo, { textureWidth: 1024, textureHeight: Math.round(1024 * gr.y / breite), color: 0xc9cdcd, clipBias: 0.003 });
+      f.position.copy(c).addScaledVector(nrm, gr[ax] / 2 + 0.002); f.lookAt(f.position.clone().add(nrm)); f.userData.ohneAO = true; m.gruppen.spiegel.add(f);   // Gruppe ohne Versatz: Welt = Gruppe; folgt ihrer Sichtbarkeit
+    }
+  }
+}
+// Tipp auf eine Tür oder Schranktür öffnet oder schließt sie, wenn keine Wand davor liegt (auch im Rundgang)
+function tuerTipp(ray, nurPruefen) {
+  const m = aktiv, G = ['tueren', 'schraenke'].map(k => m?.gruppen[k]).filter(g => g?.visible); if (!G.length) return false;
+  const h = ray.intersectObjects(G, true)[0]; if (!h || h.distance > 8) return false;
+  const w = ray.intersectObjects(['architektur', 'einbauten'].map(k => m.gruppen[k]).filter(g => g?.visible), true)[0]; if (w && w.distance < h.distance - 0.03) return false;
+  let o = h.object; while (o && !o.userData.angel) o = o.parent; if (!o) return false; if (nurPruefen) return true;
+  const A = o.userData.angel; o.userData.ziel = Math.abs((o.userData.ziel ?? A.zu) - A.offen) < 0.01 ? A.zu : A.offen; return true;
+}
 // Rundgang wie Street View (4.11., Tassilo: „Pfeile am Boden wie bei Google Maps, viel smoother, rechts und links drehen; unten keine Leiste, nur das
 // Zimmer; Türen immer offen“): die Laufwege (tools/stadt_rundgang_wege.py) sind ein Netz zwischen den Halten. Am Halt liegen weiße Pfeile am Boden, je
 // Richtung einer (durch dieselbe Tür nur der nächste Halt); Tipp auf einen Pfeil oder auf den Boden in seiner Richtung geht den Weg in einer
@@ -166,7 +194,7 @@ function bodenHoehe(x, z, sonst) {   // Oberkante Boden unter x, z (Gruppe Archi
   const g = tour?.m.gruppen.architektur; if (!g) return sonst; const h = new THREE.Raycaster(new THREE.Vector3(x, 2.0, z), new THREE.Vector3(0, -1, 0), 0, 3).intersectObject(g, true)[0]; return h ? h.point.y : sonst;
 }
 function tourStarten(m) {
-  const S = m.rundgang; if (!S?.length) return false;
+  const S = m.rundgang; if (!S?.length) return false; if (tour) tourEnde();   // erneut gestartet: von vorn, ohne doppeltes Schild
   if (m.schnitt) schnitt('kein'); if (axo) projektion('persp');
   fahrt = null; rundgangLauf = null;   // ein laufender Anflug nähme die Kamera sonst wieder mit
   tour = { m, i: 0, marken: new THREE.Group(), fov: m.haus?.fovInnen || 62 }; m.wurzel.add(tour.marken);
@@ -251,6 +279,7 @@ const tourPfeilListe = () => tour.marken.children.filter(g => g.userData.richtun
   canvas.addEventListener('pointerup', e => {
     if (!tour || tour.laeuft || !ab || Math.hypot(e.clientX - ab[0], e.clientY - ab[1]) > 6) return; const ray = tourStrahl(e);
     const h = ray.intersectObjects(tourPfeilListe(), true)[0]; if (h && h.object.userData.halt != null) { tourGehe(h.object.userData.halt); return; }
+    if (tuerTipp(ray)) return;
     const b = tour.m.gruppen.architektur && ray.intersectObject(tour.m.gruppen.architektur, true)[0]; if (!b) return;
     const d = new THREE.Vector2(b.point.x - camera.position.x, b.point.z - camera.position.z); if (d.lengthSq() > 0.01) tourRichtungGehen(d.normalize(), 50);
   });
@@ -260,13 +289,14 @@ const tourPfeilListe = () => tour.marken.children.filter(g => g.userData.richtun
       for (const g of L) g.scale.setScalar(g.userData.grund || 1);
       const h = ray.intersectObjects(L, true)[0]; canvas.style.cursor = h ? 'pointer' : '';
       if (h) { let g = h.object; while (g.parent !== tour.marken) g = g.parent; g.scale.setScalar((g.userData.grund || 1) * 1.15); tourSchild(null, tour.m.rundgang[g.userData.halt]); if (ring) ring.visible = false; return; }
-      tourSchild(tour.m.rundgang[tour.i]);
+      tourSchild(tour.m.rundgang[tour.i]); if (tuerTipp(ray, true)) { canvas.style.cursor = 'pointer'; if (ring) ring.visible = false; return; }
       const b = tour.m.gruppen.architektur && ray.intersectObject(tour.m.gruppen.architektur, true)[0];
       if (!ring) { ring = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.22, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.renderOrder = 9; }
       if (ring.parent !== tour.marken) tour.marken.add(ring);
       const boden = b && b.face && b.face.normal.clone().transformDirection(b.object.matrixWorld).y > 0.8; ring.visible = !!boden; if (boden) ring.position.copy(b.point).add(new THREE.Vector3(0, 0.02, 0));
     });
   });
+  canvas.addEventListener('pointerup', e => { if (tour || !ab || Math.hypot(e.clientX - ab[0], e.clientY - ab[1]) > 6) return; tuerTipp(tourStrahl(e)); });   // auch außerhalb des Rundgangs
   canvas.addEventListener('wheel', e => { if (!tour) return; e.preventDefault(); tour.fov = Math.min(80, Math.max(30, tour.fov * Math.exp(e.deltaY * 0.0012))); camera.fov = tour.fov; camera.updateProjectionMatrix(); }, { passive: false });
   addEventListener('keydown', e => {
     if (!tour || tour.laeuft || /input|textarea|select/i.test(document.activeElement?.tagName || '')) return; const r = canvas.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) return;
@@ -342,7 +372,8 @@ function aktiviere(name) {
   for (const l of leisten()) l.hidden = l.dataset.leiste !== name;
   if (m.anflug && !m.angeflogen) {   // Anflug (Estate): erst der Blick aus der Stadt, nach dem Laden die Fahrt zum Startblick
     m.angeflogen = true; kamera(m.anflug.pos, m.anflug.ziel);
-    setTimeout(() => { if (aktiv === m && !fahrt) { const b = m.blicke[m.start]; fahren(b.pos, b.ziel, m.anflug.dauer || 6, () => { if (m.schnittStart && !m.schnitt) schnitt(m.schnittStart); }); } }, m.anflug.wartezeit || 1500);
+    setTimeout(() => { if (aktiv === m && !fahrt) { const b = m.blicke[m.start]; fahren(b.pos, b.ziel, m.anflug.dauer || 6, () => { if (m.schnittStart && !m.schnitt) schnitt(m.schnittStart);
+      if (m.rundgangNachAnflug != null) setTimeout(() => { if (aktiv === m && !tour && !fahrt && m.schnitt === m.schnittStart) tourStarten(m); }, m.rundgangNachAnflug); }); } }, m.anflug.wartezeit || 1500);   // danach von selbst in den Rundgang (4.11., Tassilo), außer man hat schon etwas gewählt
     schnitt('kein');
   } else { blick(m.start); schnitt(m.schnitt || m.schnittStart || 'kein'); }   // schnittStart: Modell beginnt geschnitten (Estate: wie der Plan)
   for (const k of Object.keys(m.dateien)) zeige(k);
@@ -418,7 +449,8 @@ async function lade(k) {
       if (!glas && !kappenGruppe_ && !m.ohneSchnittflaechen?.includes(k)) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }   // wie bisher (Hochhaus: rote Tragwerksflächen in der Strukturansicht)
       if (!glas && kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
     }
-    d.scene.traverse(o => { const t = /^tuer\|(-?\d+)/.exec(o.name); if (t) { o.userData.angel = { winkel: +t[1] * Math.PI / 180 }; o.userData.ziel = o.userData.angel.winkel; o.rotation.y = o.userData.ziel; } });   // 4.11. (Tassilo): Türen immer offen   // Türflügel (tools/stadt_tueren.mjs): Drehpunkt = Angel
+    d.scene.traverse(o => { const t = /^(tuer|schrank)\|(-?\d+)(?:\|(-?\d+))?(\|zu)?/.exec(o.name); if (t) { const g = Math.PI / 180; o.userData.angel = { offen: +t[2] * g, zu: +(t[3] || 0) * g }; o.userData.ziel = t[1] === 'tuer' && !t[4] ? o.userData.angel.offen : o.userData.angel.zu; o.rotation.y = o.userData.ziel; } });   // Türen offen (Treppenhaus- und Abstelltüren zu), Schränke zu; Tipp schaltet
+    if (k === 'spiegel') spiegelBauen(m, netze);   // 4.11. (Tassilo): Türen immer offen   // Türflügel (tools/stadt_tueren.mjs): Drehpunkt = Angel
     g.add(d.scene); g.visible = m === aktiv ? sollSichtbar(k) : true;
     if (m.versatz?.[k]) g.position.set(...m.versatz[k]);   // z. B. Stadt: Straßenniveau unter dem Wohnungsgeschoss
     if (m.ebenen?.length) clipSetzen(m);   // nachgeladene Gruppe in den laufenden Schnitt
@@ -574,8 +606,11 @@ window.formaZustand.treffer = (pos, ziel) => { const o = new THREE.Vector3(...po
   const g = Object.entries(aktiv.gruppen).find(([, gr]) => { let y = h.object; while (y) { if (y === gr) return true; y = y.parent; } return false; })?.[0];
   return { abstand: +h.distance.toFixed(2), gruppe: g, kette: kette.slice(0, 6), punkt: h.point.toArray().map(v => +v.toFixed(2)) }; };
 window.formaZustand.tour = () => tour ? { halt: tour.i, marken: tourPfeilListe().length, laeuft: !!tour.laeuft, leiste: !!wrap.querySelector('.m-tour'), raum: tour.schild?.querySelector('b')?.textContent, fov: camera.fov } : null;
-window.formaZustand.tuerenOffen = () => { let n = 0; aktiv.gruppen.tueren?.traverse(o => { if (o.userData.angel && Math.abs(o.rotation.y) > 1) n++; }); return n; };
+window.formaZustand.tuerenOffen = () => { let n = 0; aktiv.gruppen.tueren?.traverse(o => { const A = o.userData.angel; if (A && Math.abs(o.rotation.y - A.offen) < 0.05 && Math.abs(A.offen - A.zu) > 1) n++; }); return n; };
+window.formaZustand.tuerenListe = () => { const L = []; aktiv.gruppen.tueren?.traverse(o => { if (o.userData.angel) L.push([o.name, +o.rotation.y.toFixed(2)]); }); return L; };
 window.formaZustand.pfeilBild = () => tour ? tourPfeilListe().map(g => { const w = g.getWorldPosition(new THREE.Vector3()), v = w.clone().project(camera); return { halt: g.userData.halt, welt: w.toArray().map(x => +x.toFixed(2)), bild: [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(3)], sichtbar: g.visible && g.parent?.visible && g.parent.parent?.visible, kam: camera.position.toArray().map(x => +x.toFixed(2)) }; }) : null;
+window.formaZustand.blickRichtung = d => { if (!tour) return; tourBlick(camera.position.toArray(), new THREE.Vector3(...d)); };
+window.formaZustand.schraenke = auf => { let n = 0; aktiv.gruppen.schraenke?.traverse(o => { const A = o.userData.angel; if (!A) return; n++; if (auf != null) o.userData.ziel = auf ? A.offen : A.zu; }); return n; };
 window.formaZustand.tourPfeile = () => tour ? tourPfeilListe().map(g => g.userData.halt) : [];
 window.formaZustand.tourGehe = j => tourGehe(j);
 window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen

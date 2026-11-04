@@ -195,3 +195,6 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 .m-raum b{display:block;font-size:16px}
 .m-raum span{display:block;font-size:13px;color:var(--grau);margin-top:2px;transition:opacity .6s}
 .m-raum.still span{opacity:0;height:0;margin:0}
+/* 4.11. (Tassilo: Pläne abgeschnitten): beide Pläne ganz, übereinander, volle Breite */
+.lieferung .plaene{display:grid;gap:28px;margin-bottom:28px}
+.lieferung .plaene img{width:100%;height:auto;aspect-ratio:auto;object-fit:contain;border:1px solid var(--linie);background:#fff}
