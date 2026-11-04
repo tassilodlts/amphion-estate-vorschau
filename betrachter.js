@@ -193,16 +193,30 @@ const tourRichtung = st => new THREE.Vector3(...st.ziel).sub(new THREE.Vector3(.
 function bodenHoehe(x, z, sonst) {   // Oberkante Boden unter x, z (Gruppe Architektur: Böden, Stufen, Terrassen 30 cm höher)
   const g = tour?.m.gruppen.architektur; if (!g) return sonst; const h = new THREE.Raycaster(new THREE.Vector3(x, 2.0, z), new THREE.Vector3(0, -1, 0), 0, 3).intersectObject(g, true)[0]; return h ? h.point.y : sonst;
 }
-function tourStarten(m) {
+function tourStarten(m, sanft) {
   const S = m.rundgang; if (!S?.length) return false; if (tour) tourEnde();   // erneut gestartet: von vorn, ohne doppeltes Schild
-  if (m.schnitt) schnitt('kein'); if (axo) projektion('persp');
+  if (m.schnitt && !sanft) schnitt('kein'); if (axo) projektion('persp');   // beim sanften Einflug erst unter der Decke
   fahrt = null; rundgangLauf = null;   // ein laufender Anflug nähme die Kamera sonst wieder mit
   tour = { m, i: 0, marken: new THREE.Group(), fov: m.haus?.fovInnen || 62 }; m.wurzel.add(tour.marken);
   const l = document.createElement('div'); l.className = 'm-raum'; l.innerHTML = '<b></b><span></span>'; l.querySelector('span').textContent = (SAGT_TOUR[sprache()] || SAGT_TOUR.es).hinweis;
   wrap.querySelector('.m-buehne').append(l); tour.schild = l; setTimeout(() => l.classList.add('still'), 7000);
   const st = S[0]; tourSchild(st); tour.laeuft = true;
+  if (sanft && camera.isPerspectiveCamera) { einfliegen(st); return true; }
   ueberblenden(st.pos, st.ziel, () => { if (!tour) return; tour.laeuft = false; camera.fov = tour.fov; camera.updateProjectionMatrix(); tourBlick(st.pos, tourRichtung(st)); tourPfeile(); });
   return true;
+}
+function einfliegen(st) {   // von der Übersicht ohne Decke sanft hinein: Bogen über den Halt und senkrecht hinab, Blickrichtung bleibt gleich, nur der Blick senkt sich
+  const t = tour, p0 = camera.position.clone(), T = new THREE.Vector3(...st.pos), C = new THREE.Vector3(T.x, Math.max(T.y + 3, p0.y * 0.85), T.z), d0 = camera.getWorldDirection(new THREE.Vector3());
+  const h = new THREE.Vector3(d0.x, 0, d0.z).normalize(), n0 = Math.asin(Math.max(-1, Math.min(1, d0.y))), n1 = -0.14, f0 = camera.fov, t0 = performance.now(), dauer = 4200, m = t.m;
+  controls.enabled = false;
+  fahrt = () => {
+    const u = Math.min(1, (performance.now() - t0) / dauer), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2, a = 1 - e;
+    camera.position.set(a * a * p0.x + 2 * a * e * C.x + e * e * T.x, a * a * p0.y + 2 * a * e * C.y + e * e * T.y, a * a * p0.z + 2 * a * e * C.z + e * e * T.z);
+    const nk = n0 + (n1 - n0) * e, d = h.clone().multiplyScalar(Math.cos(nk)).setY(Math.sin(nk)); controls.target.copy(camera.position).addScaledVector(d, 0.01); camera.lookAt(controls.target);
+    camera.fov = f0 + (t.fov - f0) * e; camera.updateProjectionMatrix();
+    if (m.schnitt && camera.position.y < T.y + 0.9) schnitt('kein');   // unter der Decke: Decke wieder zu
+    if (u >= 1) { fahrt = null; t.laeuft = false; tourBlick(st.pos, d); tourPfeile(); }
+  };
 }
 function tourSchild(st, wohin) { const b = tour?.schild?.querySelector('b'); if (b) b.textContent = wohin ? '→ ' + tourName(wohin) : tourName(st); melde(''); }
 function ueberblenden(pos, ziel, danach) {   // ohne Laufweg (von außen hinein): kurz abblenden und springen statt durch Wände zu fahren
@@ -213,7 +227,7 @@ function tourPfad(i, j) {   // Laufweg zwischen zwei Halten (Grundriss x, z), in
   const W = tour?.m.rundgangWege?.wege; if (i == null || !W) return null; const a = W[Math.min(i, j) + '-' + Math.max(i, j)]; return a ? (i < j ? a : [...a].reverse()) : null;
 }
 function tourBlick(pos, dir) {   // Umsehen am Standpunkt: Drehpunkt 1 cm vor dem Auge, Ziehen dreht den Blick, kein Verschieben, kein Zoom; Blick mindestens 14° nach unten, dort liegen die Pfeile
-  const d = dir.clone().normalize(); if (d.y > -0.24) { const hz = Math.hypot(d.x, d.z) || 1; d.set(d.x / hz * 0.97, -0.24, d.z / hz * 0.97).normalize(); }
+  const d = dir.clone().normalize(); if (d.y > -0.14) { const hz = Math.hypot(d.x, d.z) || 1; d.set(d.x / hz * 0.99, -0.14, d.z / hz * 0.99).normalize(); }
   camera.position.set(...pos); controls.target.copy(camera.position).addScaledVector(d, 0.01);
   controls.enabled = true; controls.enablePan = false; controls.enableZoom = false; controls.rotateSpeed = -0.35; controls.minDistance = 0; controls.maxPolarAngle = Math.PI - 0.05; controls.update();
 }
@@ -234,7 +248,7 @@ function tourGehe(j) {
     const u = Math.min(1, (performance.now() - t0) / dauer), e = 0.5 - 0.5 * Math.cos(Math.PI * u), p = kurve.getPointAt(e);
     const vor = kurve.getPointAt(Math.min(1, e + Math.min(0.5, 0.9 / L))).sub(kurve.getPointAt(Math.max(0, e - (0.3 + 1.2 * e) / L))); vor.y = 0;   // am Ende die letzten 1,5 m, nicht der letzte Schnipsel
     if (vor.lengthSq() > 1e-6) richtung.copy(vor.normalize());   // Gehrichtung behalten wie Street View, Blick leicht nach unten (dort liegen die Pfeile)
-    const w = Math.max(0, (e - 0.55) / 0.45) * (passt ? 1 : 0), soll = richtung.clone().multiplyScalar(1 - w).addScaledVector(zielH, w).normalize(); soll.y = -0.12 - 0.12 * e; soll.normalize();   // zum Blick des Halts nur, wenn er ungefähr in Gehrichtung liegt
+    const w = Math.max(0, (e - 0.55) / 0.45) * (passt ? 1 : 0), soll = richtung.clone().multiplyScalar(1 - w).addScaledVector(zielH, w).normalize(); soll.y = -0.14; soll.normalize();   // zum Blick des Halts nur, wenn er ungefähr in Gehrichtung liegt
     blick.lerp(soll, u >= 1 ? 1 : 0.09).normalize();
     camera.position.set(p.x, hoehe(e) + hA + (hB - hA) * e, p.z); controls.target.copy(camera.position).addScaledVector(blick, 0.01); camera.lookAt(controls.target);
     if (u >= 1) { fahrt = null; t.laeuft = false; t.i = j; tourBlick(camera.position.toArray(), blick); tourPfeile(); }
@@ -246,20 +260,20 @@ function pfeil() {   // flacher Winkelpfeil wie bei Street View: weiß mit weich
   const g = new THREE.Group(), geo = new THREE.ShapeGeometry(PFEIL_FORM); geo.rotateX(Math.PI / 2);
   const schatten = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthTest: false, side: THREE.DoubleSide })); schatten.scale.setScalar(1.18); schatten.position.set(0, -0.002, -0.02); schatten.renderOrder = 10;
   const weiss = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.94, depthTest: false, side: THREE.DoubleSide })); weiss.renderOrder = 11;
-  g.add(schatten, weiss); return g;
+  const neig = new THREE.Group(); neig.rotation.x = -0.75; neig.add(schatten, weiss); g.add(neig); return g;   // Spitze 43° angehoben, zum Betrachter geneigt
 }
 function pfadPunkt(p, weit) { let rest = weit; for (let n = 1; n < p.length; n++) { const a = p[n - 1], b = p[n], l = Math.hypot(b[0] - a[0], b[1] - a[1]); if (l >= rest) return [a[0] + (b[0] - a[0]) * rest / l, a[1] + (b[1] - a[1]) * rest / l]; rest -= l; } return p.at(-1); }
 function tourPfeile() {   // je Richtung ein Pfeil auf dem Weg, bis 3 m voraus (näher liegt er unter dem Bildrand); durch dieselbe Tür (unter 28°) nur der nähere Halt
   const t = tour; if (!t) return; pfeileWeg(); const c = camera.position, boden = bodenHoehe(c.x, c.z, c.y - 1.6) + 0.03, kand = [];
   for (const k of t.m.rundgangWege?.nachbarn?.[t.i] || []) {
     const p = tourPfad(t.i, k) || [[c.x, c.z], [t.m.rundgang[k].pos[0], t.m.rundgang[k].pos[2]]]; let L = 0; for (let n = 1; n < p.length; n++) L += Math.hypot(p[n][0] - p[n - 1][0], p[n][1] - p[n - 1][1]);
-    const q1 = pfadPunkt(p, 1.2), q = pfadPunkt(p, Math.max(Math.min(1.2, L), Math.min(3.0, L - 0.4))), d = new THREE.Vector2(q1[0] - c.x, q1[1] - c.z), r = new THREE.Vector2(q[0] - c.x, q[1] - c.z);
+    const q1 = pfadPunkt(p, 1.2), q = pfadPunkt(p, Math.max(Math.min(1.2, L), Math.min(2.2, L - 0.4))), d = new THREE.Vector2(q1[0] - c.x, q1[1] - c.z), r = new THREE.Vector2(q[0] - c.x, q[1] - c.z);
     if (d.lengthSq() > 1e-4 && r.lengthSq() > 1e-4) kand.push({ k, d: d.normalize(), q, r: r.normalize(), L });
   }
   const gesetzt = [];
   for (const { k, d, q, r } of kand.sort((a, b) => a.L - b.L)) {
     if (gesetzt.some(e => e.dot(d) > Math.cos(28 * Math.PI / 180))) continue; gesetzt.push(d);
-    const g = pfeil(); g.scale.setScalar(1.35); g.userData.grund = 1.35; g.position.set(q[0], bodenHoehe(q[0], q[1], boden - 0.03) + 0.03, q[1]); g.rotation.y = Math.atan2(r.x, r.y); g.traverse(o => { o.userData.halt = k; }); g.userData.richtung = d; t.marken.add(g);
+    const g = pfeil(); g.scale.setScalar(1.1); g.userData.grund = 1.1; g.position.set(q[0], bodenHoehe(q[0], q[1], boden - 0.03) + 1.0, q[1]); g.rotation.y = Math.atan2(r.x, r.y); g.traverse(o => { o.userData.halt = k; }); g.userData.richtung = d; t.marken.add(g);   // auf etwa 1 m (4.11., Tassilo: am Boden sah man sie nicht)
   }
 }
 function tourEnde() {
@@ -275,7 +289,7 @@ function tourStrahl(e) { const r = canvas.getBoundingClientRect(), ray = new THR
 const tourPfeilListe = () => tour.marken.children.filter(g => g.userData.richtung);
 // Tipp auf einen Pfeil: dorthin gehen; Tipp auf den Boden: in diese Richtung (nur ein Tipp, kein Ziehen); Maus über dem Boden zeigt einen Ring wie Street View
 { let ab = null, ring = null, anstehend = false;
-  canvas.addEventListener('pointerdown', e => { ab = [e.clientX, e.clientY]; });
+  canvas.addEventListener('pointerdown', e => { ab = [e.clientX, e.clientY]; if (aktiv) aktiv.angetippt = true; });   // wer selbst steuert, bekommt keinen Auto-Rundgang
   canvas.addEventListener('pointerup', e => {
     if (!tour || tour.laeuft || !ab || Math.hypot(e.clientX - ab[0], e.clientY - ab[1]) > 6) return; const ray = tourStrahl(e);
     const h = ray.intersectObjects(tourPfeilListe(), true)[0]; if (h && h.object.userData.halt != null) { tourGehe(h.object.userData.halt); return; }
@@ -372,8 +386,10 @@ function aktiviere(name) {
   for (const l of leisten()) l.hidden = l.dataset.leiste !== name;
   if (m.anflug && !m.angeflogen) {   // Anflug (Estate): erst der Blick aus der Stadt, nach dem Laden die Fahrt zum Startblick
     m.angeflogen = true; kamera(m.anflug.pos, m.anflug.ziel);
-    setTimeout(() => { if (aktiv === m && !fahrt) { const b = m.blicke[m.start]; fahren(b.pos, b.ziel, m.anflug.dauer || 6, () => { if (m.schnittStart && !m.schnitt) schnitt(m.schnittStart);
-      if (m.rundgangNachAnflug != null) setTimeout(() => { if (aktiv === m && !tour && !fahrt && m.schnitt === m.schnittStart) tourStarten(m); }, m.rundgangNachAnflug); }); } }, m.anflug.wartezeit || 1500);   // danach von selbst in den Rundgang (4.11., Tassilo), außer man hat schon etwas gewählt
+    setTimeout(() => { if (aktiv === m && !fahrt) { const b = m.blicke[m.start]; fahren(b.pos, b.ziel, m.anflug.dauer || 6, () => { const frei = () => aktiv === m && !tour && !fahrt && !m.angetippt;
+      // 4.11. (Tassilo): stehen bleiben mit Dach, dann Dach in einem Schritt weg, dann ohne Abblenden hinein in den Rundgang
+      if (m.rundgangNachAnflug == null) { if (m.schnittStart && !m.schnitt) schnitt(m.schnittStart); return; }
+      setTimeout(() => { if (!frei()) return; if (m.schnittStart) schnitt(m.schnittStart); setTimeout(() => { if (frei() && m.schnitt === m.schnittStart) tourStarten(m, true); }, 900); }, m.rundgangNachAnflug); }); } }, m.anflug.wartezeit || 1500);
     schnitt('kein');
   } else { blick(m.start); schnitt(m.schnitt || m.schnittStart || 'kein'); }   // schnittStart: Modell beginnt geschnitten (Estate: wie der Plan)
   for (const k of Object.keys(m.dateien)) zeige(k);
@@ -611,6 +627,8 @@ window.formaZustand.tuerenListe = () => { const L = []; aktiv.gruppen.tueren?.tr
 window.formaZustand.pfeilBild = () => tour ? tourPfeilListe().map(g => { const w = g.getWorldPosition(new THREE.Vector3()), v = w.clone().project(camera); return { halt: g.userData.halt, welt: w.toArray().map(x => +x.toFixed(2)), bild: [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(3)], sichtbar: g.visible && g.parent?.visible && g.parent.parent?.visible, kam: camera.position.toArray().map(x => +x.toFixed(2)) }; }) : null;
 window.formaZustand.blickRichtung = d => { if (!tour) return; tourBlick(camera.position.toArray(), new THREE.Vector3(...d)); };
 window.formaZustand.schraenke = auf => { let n = 0; aktiv.gruppen.schraenke?.traverse(o => { const A = o.userData.angel; if (!A) return; n++; if (auf != null) o.userData.ziel = auf ? A.offen : A.zu; }); return n; };
+window.formaZustand.pfeileNeu = () => { try { tourPfeile(); return tourPfeilListe().length; } catch (e) { return String(e.stack).slice(0, 400); } };
+window.formaZustand.tourDebug = () => tour ? { i: tour.i, nb: tour.m.rundgangWege?.nachbarn?.[tour.i], kinder: tour.marken.children.length, pos: camera.position.toArray() } : null;
 window.formaZustand.tourPfeile = () => tour ? tourPfeilListe().map(g => g.userData.halt) : [];
 window.formaZustand.tourGehe = j => tourGehe(j);
 window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
