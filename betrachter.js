@@ -237,7 +237,7 @@ async function ladeTiles(m, k, g) {
   t.group.rotation.x = -Math.PI / 2; m.eigenhaus ||= new Set();
   t.addEventListener('load-model', ({ scene: s }) => s.traverse(o => {
     if (!o.isMesh) return; const alt = o.material; o.material = new THREE.MeshBasicMaterial({ map: alt.map, side: THREE.DoubleSide, toneMapped: false }); alt.dispose(); o.frustumCulled = false; o.userData.ohneAO = true;   // Licht steckt im Foto
-    if (o.name === 'eigenhaus' || o.parent?.name === 'eigenhaus') { m.eigenhaus.add(o); o.visible = !m.hausInnen; }
+    if (/^eigenhaus/.test(o.name) || /^eigenhaus/.test(o.parent?.name || '')) { m.eigenhaus.add(o); o.visible = !m.hausInnen; }   // Blender zählt weitere Teile hoch (eigenhaus.001, 4.11.)
   }));
   t.addEventListener('dispose-model', ({ scene: s }) => s.traverse(o => m.eigenhaus.delete(o)));
   g.add(t.group); if (m.versatz?.[k]) g.position.set(...m.versatz[k]); m.tiles = t; melde('');
