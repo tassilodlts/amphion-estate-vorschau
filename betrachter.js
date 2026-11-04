@@ -160,6 +160,7 @@ function aktiviere(name) {
   aktiv = m; m.wurzel.visible = true;
   scene.fog = m.nebel ? new THREE.Fog(m.nebel[0], m.nebel[1], m.nebel[2]) : null;   // ferne Stadt und Berge verblassen
   const L = m.hell || {}; LICHT.himmel.intensity = L.himmel ?? 1.15; LICHT.himmel.groundColor.set(L.boden ?? 0xb8b8b8); LICHT.sonne.intensity = L.sonne ?? 1.5; LICHT.gegen.intensity = L.gegen ?? 0.5;
+  KAPPE.color.set(m.schnittFarbe ?? 0x3a3634); SCHNITT.color.set(m.schnittFarbe ?? 0x1c1c1c);   // Schnittflächen: dunkel wie im Plan, Estate weiß (4.11., Tassilo: keine dunklen Flecke)
   for (const b of wrap.querySelectorAll('.m-reiter button')) b.classList.toggle('on', b.dataset.modell === name);
   for (const l of leisten()) l.hidden = l.dataset.leiste !== name;
   if (m.anflug && !m.angeflogen) {   // Anflug (Estate): erst der Blick aus der Stadt, nach dem Laden die Fahrt zum Startblick

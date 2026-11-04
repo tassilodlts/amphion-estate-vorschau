@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta name="robots" content="noindex">
-<script>window.AMPHION_DATEIEN={"app.js":"79da3ce662","bauplatz.js":"43a2842860","betrachter.js":"16ea3af9c9","bilder/plano_a.jpg":"26152ed860","bilder/plano_b.jpg":"01c641782a","bilder/render_bano_A.jpg":"035e8f038d","bilder/render_cocina_desde_comedor.jpg":"70f9f999de","bilder/render_comedor.jpg":"46f2c67deb","bilder/render_dormitorio_1.jpg":"bf7c2a0b07","bilder/render_isla_abierta.jpg":"50d804bc43","bilder/render_salon.jpg":"6bfdd0b045","bilder/render_terraza.jpg":"28d8382729","favicon.svg":"5f71fbf261","modell/monteesquinza/architektur.glb":"b75a104689","modell/monteesquinza/einbauten.glb":"4e4be40666","modell/monteesquinza/farben.json":"9bdc7cad48","modell/monteesquinza/farben_rhino.txt":"30eb7f6d86","modell/monteesquinza/hausoffen.glb":"82e4313363","modell/monteesquinza/hausschnitt.glb":"d58f96bfd2","modell/monteesquinza/info.json":"1a5b893c58","modell/monteesquinza/moebel.glb":"d20eb763e6","modell/monteesquinza/nachbarn.glb":"caaeb6691b","modell/monteesquinza/stadt.json":"31dc58dc7c","modell/monteesquinza/stadt3d/tileset.json":"df450eebfe","modell/monteesquinza/technik.glb":"bc1a523d1c","style.css":"28449bbcd0"}</script>
+<script>window.AMPHION_DATEIEN={"app.js":"79da3ce662","bauplatz.js":"43a2842860","betrachter.js":"9ef1de1acd","bilder/plano_a.jpg":"26152ed860","bilder/plano_b.jpg":"01c641782a","bilder/render_bano_A.jpg":"035e8f038d","bilder/render_cocina_desde_comedor.jpg":"70f9f999de","bilder/render_comedor.jpg":"46f2c67deb","bilder/render_dormitorio_1.jpg":"bf7c2a0b07","bilder/render_isla_abierta.jpg":"50d804bc43","bilder/render_salon.jpg":"6bfdd0b045","bilder/render_terraza.jpg":"28d8382729","favicon.svg":"5f71fbf261","modell/monteesquinza/architektur.glb":"77e784418c","modell/monteesquinza/einbauten.glb":"4e4be40666","modell/monteesquinza/farben.json":"9bdc7cad48","modell/monteesquinza/farben_rhino.txt":"30eb7f6d86","modell/monteesquinza/hausoffen.glb":"d05278b82d","modell/monteesquinza/hausschnitt.glb":"d58f96bfd2","modell/monteesquinza/info.json":"1a5b893c58","modell/monteesquinza/moebel.glb":"d20eb763e6","modell/monteesquinza/nachbarn.glb":"cc6b37b57e","modell/monteesquinza/stadt.json":"31dc58dc7c","modell/monteesquinza/stadt3d/tileset.json":"df450eebfe","modell/monteesquinza/technik.glb":"bc1a523d1c","style.css":"28449bbcd0"}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="titel">Amphion Estate · La vivienda reformada antes de la obra</title>
@@ -173,7 +173,7 @@ window.AMPHION_MODELLE = {
     haus: { nah: 150, dach: 2.68, schnitt: 'hausschnitt', offen: 'hausoffen', wohnung: ['architektur', 'einbauten', 'technik', 'moebel'], nachbarn: ['nachbarn'], innen: [-11.5, -0.6, -11, 11.5, 3.6, 11] },
     anflug: { pos: [2600, 2300, 3100], ziel: [0, -10, 0], dauer: 9, wartezeit: 2500 },
     kappen: ['architektur', 'einbauten'],
-    hell: { himmel: 2.7, boden: 0xe4e2de, sonne: 1.1, gegen: 0.45 },   /* 4.11. (Tassilo): Wände weiß wie in Rhino; die Fotostadt bleibt unbeleuchtet */
+    hell: { himmel: 2.7, boden: 0xe4e2de, sonne: 1.1, gegen: 0.45 }, schnittFarbe: 0xf4f3f0,   /* 4.11. (Tassilo): Schnitt der Wände weiß, keine dunklen Flecke */   /* 4.11. (Tassilo): Wände weiß wie in Rhino; die Fotostadt bleibt unbeleuchtet */
     nah: 0.05, fern: 14000, nahst: 0.4, fernst: 7000,   /* 4.11. (Tassilo: nicht zoomen können): weiter hinaus als der Anflug (4,6 km), sonst kommt man nie mehr zur Stadtübersicht zurück */ start: 'ecke', schnittStart: 'planta',
     blicke: { ecke: { pos: [22, 15, 19], ziel: [0, 0, 0] }, oben: { pos: [0.01, 38, 0], ziel: [0, 0, 0] }, salon: { pos: [2.6, 1.5, 1.0], ziel: [8.5, 1.0, 6.5] }, terraza: { pos: [9.3, 1.6, 6.8], ziel: [3.2, 1.0, 2.0] } },
     schnitte: { planta: [0, -1, 0, 2.38],   /* 3.11. (Tassilo): nicht bei 1,20 m schneiden, nur die Decke weg (Platte 2,70 bis 2,80 m, abgehängte Decken ab 2,40 m) */ laengs: [1, 0, 0, 0], quer: [0, 0, -1, 0] },
@@ -189,6 +189,6 @@ window.AMPHION_MODELLE = {
 </script>
 <script src="app.js?v=79da3ce662"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/","3d-tiles-renderer/three":"https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.28/build/index.three.js"}}</script>
-<script type="module" src="betrachter.js?v=16ea3af9c9"></script>
+<script type="module" src="betrachter.js?v=9ef1de1acd"></script>
 </body>
 </html>
