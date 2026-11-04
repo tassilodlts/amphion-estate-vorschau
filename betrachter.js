@@ -236,7 +236,7 @@ async function ladeTiles(m, k, g) {
   if (v) t.preprocessURL = u => { const x = new URL(u, location.href); if (!x.searchParams.has('v')) x.searchParams.set('v', v); return x.href; };
   t.group.rotation.x = -Math.PI / 2; m.eigenhaus ||= new Set();
   t.addEventListener('load-model', ({ scene: s }) => s.traverse(o => {
-    if (!o.isMesh) return; const alt = o.material; o.material = new THREE.MeshBasicMaterial({ map: alt.map, side: THREE.DoubleSide, toneMapped: false }); alt.dispose(); o.frustumCulled = false;   // Licht steckt im Foto
+    if (!o.isMesh) return; const alt = o.material; o.material = new THREE.MeshBasicMaterial({ map: alt.map, side: THREE.DoubleSide, toneMapped: false }); alt.dispose(); o.frustumCulled = false; o.userData.ohneAO = true;   // Licht steckt im Foto
     if (o.name === 'eigenhaus' || o.parent?.name === 'eigenhaus') { m.eigenhaus.add(o); o.visible = !m.hausInnen; }
   }));
   t.addEventListener('dispose-model', ({ scene: s }) => s.traverse(o => m.eigenhaus.delete(o)));
@@ -260,10 +260,10 @@ async function lade(k) {
   melde('…');
   if (/tileset\.json$/.test(m.dateien[k])) { try { await ladeTiles(m, k, g); } catch (e) { melde(fehler?.textContent || 'Fehler'); console.error(e); } return; }
   try {
-    const d = await loader.loadAsync(mitVersion(m.basis + m.dateien[k]));
+    const d = await loader.loadAsync(mitVersion(m.basis + ((SCHWACH && m.dateienLeicht?.[k]) || m.dateien[k])));   // Handy: leichte Fassung (4.11.: Pflanzen ausgedünnt)
     const netze = []; d.scene.traverse(o => { if (o.isMesh) netze.push(o); });   // erst sammeln: die Schnittflächen kommen als Kinder dazu
     for (const o of netze) {
-      if (o.material.map && !o.material.name.startsWith('tex:')) { o.material = new THREE.MeshBasicMaterial({ map: o.material.map, side: THREE.DoubleSide, toneMapped: false }); o.frustumCulled = false; continue; }   // Fotokacheln: das Licht steckt im Foto
+      if (o.material.map && !o.material.name.startsWith('tex:')) { o.material = new THREE.MeshBasicMaterial({ map: o.material.map, side: THREE.DoubleSide, toneMapped: false }); o.frustumCulled = false; o.userData.ohneAO = true; continue; }   // Fotostadt: Licht steckt im Foto, keine Verschattung (4.11.: Stadt sonst dunkel)   // Fotokacheln: das Licht steckt im Foto
       if (o.material.map) {   // texturierte Teile (Estate, Rhino-Materialien): beleuchtet, Bild wiederholt sich, geschlossene Körper bekommen Kappen
         const solid = !!o.material.userData?.solid; o.material.map.wrapS = o.material.map.wrapT = THREE.RepeatWrapping; o.material.map.colorSpace = THREE.SRGBColorSpace; o.material.map.anisotropy = 4;
         o.material = matWohnung(m, o, o.material.map); o.frustumCulled = false;   // flatShading: ohne Normalen im GLB sonst schwarz
