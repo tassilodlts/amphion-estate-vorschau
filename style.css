@@ -58,7 +58,7 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 .m-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .m-chips button{font:inherit;font-size:14px;padding:7px 12px;border:1px solid var(--linie);background:var(--bg);cursor:pointer;border-radius:999px}
 .m-chips button:hover{border-color:var(--ink)}
-.m-buehne{position:relative;aspect-ratio:1/1;width:min(100%,calc(100svh - 120px));margin:0 auto;background:#f2f2f2;overflow:hidden}   /* 4.11. (Tassilo): quadratisch, beide Seiten gleich, ganz im Bildschirm */
+.m-buehne{position:relative;aspect-ratio:16/10;width:min(100%,calc((100svh - 120px) * 1.6));margin:0 auto;background:#f2f2f2;overflow:hidden}   /* 4.11. (Tassilo): quadratisch, beide Seiten gleich, ganz im Bildschirm */
 .m-buehne canvas{width:100%;height:100%;display:block;touch-action:none}
 .m-quelle{position:absolute;right:10px;bottom:8px;font-size:11px;color:#fff;opacity:.85;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none}   /* Namensnennung der Fotostadt (Google 3D Tiles) */
 .m-status{position:absolute;left:12px;bottom:10px;font-size:14px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);pointer-events:none}
@@ -177,7 +177,7 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 @media (max-width:620px){.m-tour .t-wort{display:none}.m-tour .t-name{max-width:34vw}}
 .m-tour button{white-space:nowrap}
 /* El barrio (4.11.): Liste unter dem Bild, je Kategorie das nächste Ziel mit Fußweg in Minuten */
-.m-barrio{max-width:min(100%,calc(100svh - 120px));margin:12px auto 0}
+.m-barrio{max-width:min(100%,calc((100svh - 120px) * 1.6));margin:12px auto 0}
 .m-barrio[hidden]{display:none}
 .m-barrio .b-titel{font-weight:700;font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--akzent);margin-bottom:8px}
 .m-barrio .b-liste{display:grid;grid-template-columns:1fr;gap:4px}
@@ -188,3 +188,10 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 .m-barrio .b-fern-zeile{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:15px}
 .m-barrio .b-hinweis{font-size:13px;color:var(--hell);margin-top:6px}
 @media (min-width:760px){.m-barrio .b-liste{grid-template-columns:1fr 1fr}}
+/* 4.11. (Tassilo: am Rechner breiter als hoch): 16:10, am Handy quadratisch */
+@media (max-width:759px){.m-buehne{aspect-ratio:1/1;width:min(100%,calc(100svh - 120px))}.m-barrio{max-width:min(100%,calc(100svh - 120px))}}
+/* Rundgang wie Street View: oben links nur der Raum, darunter einmal kurz der Hinweis */
+.m-raum{position:absolute;left:12px;top:12px;z-index:3;pointer-events:none;background:rgba(255,255,255,.94);padding:8px 12px;max-width:calc(100% - 24px);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.m-raum b{display:block;font-size:16px}
+.m-raum span{display:block;font-size:13px;color:var(--grau);margin-top:2px;transition:opacity .6s}
+.m-raum.still span{opacity:0;height:0;margin:0}

@@ -137,6 +137,7 @@ function fahren(pos, ziel, dauer = 3, danach = null) {
 }
 function zoomen(f) {   // f < 1 näher, f > 1 weiter weg; Grenzen der Steuerung gelten
   if (!camera || !controls || !isFinite(f) || f <= 0) return;
+  if (tour) { tour.fov = Math.min(80, Math.max(30, tour.fov * f)); camera.fov = tour.fov; camera.updateProjectionMatrix(); return; }   // im Rundgang: Bildwinkel statt Abstand
   if (camera.isOrthographicCamera) { camera.zoom = Math.min(controls.maxZoom, Math.max(controls.minZoom, camera.zoom / f)); camera.updateProjectionMatrix(); return; }
   const v = camera.position.clone().sub(controls.target), d = Math.min(controls.maxDistance, Math.max(controls.minDistance, v.length() * f));
   camera.position.copy(controls.target).addScaledVector(v.normalize(), d);
@@ -152,81 +153,128 @@ function blenden(pos, ziel, danach) {
   setTimeout(() => { if (!rundgangLauf) { canvas.style.opacity = '1'; return; } camera.position.set(...pos); controls.target.set(...ziel); camera.lookAt(controls.target); controls.update(); canvas.style.opacity = '1'; setTimeout(() => danach?.(), 350); }, 320);
 }
 function fahrtAbbrechen() { if (tour) return; if (fahrt || rundgangLauf) { fahrt = null; rundgangLauf = null; if (controls) { controls.enabled = true; controls.target.copy(controls.target); } } }   // im Rundgang zum Selbersteuern bricht Ziehen nichts ab
-// Geführter Rundgang zum Selbersteuern (4.11., Tassilo: „Pfeile, wohin man geht; Pfeil drücken bewegt durch die Wohnung; nicht komplette Freiheit,
-// sonst verliert man sich“): feste Standpunkte, dort nur Umsehen (kein Verschieben, kein Zoom); Bodenmarken zu den Halten, die man von hier sieht;
-// Leiste mit Zurück, Weiter, Türen, Beenden
+// Rundgang wie Street View (4.11., Tassilo: „Pfeile am Boden wie bei Google Maps, viel smoother, rechts und links drehen; unten keine Leiste, nur das
+// Zimmer; Türen immer offen“): die Laufwege (tools/stadt_rundgang_wege.py) sind ein Netz zwischen den Halten. Am Halt liegen weiße Pfeile am Boden, je
+// Richtung einer (durch dieselbe Tür nur der nächste Halt); Tipp auf einen Pfeil oder auf den Boden in seiner Richtung geht den Weg in einer
+// fließenden Bewegung (gerundete Bahn, sanft an- und abfahren, Blick in Gehrichtung und leicht nach unten). Ziehen dreht den Blick, Mausrad und zwei
+// Finger ändern den Bildwinkel, Tasten ↑ ↓ gehen, ← → drehen. Oben links nur der Raumname.
 let tour = null;
+const SAGT_TOUR = { es: { hinweis: 'Arrastra para mirar. Toca una flecha o el suelo para avanzar.' }, en: { hinweis: 'Drag to look around. Tap an arrow or the floor to walk.' }, de: { hinweis: 'Ziehen zum Umsehen. Pfeil oder Boden antippen zum Gehen.' } };
+function tourName(st) { return typeof st.name === 'object' ? st.name[sprache()] || st.name.es : st.name; }
+const tourRichtung = st => new THREE.Vector3(...st.ziel).sub(new THREE.Vector3(...st.pos)).normalize();
+function bodenHoehe(x, z, sonst) {   // Oberkante Boden unter x, z (Gruppe Architektur: Böden, Stufen, Terrassen 30 cm höher)
+  const g = tour?.m.gruppen.architektur; if (!g) return sonst; const h = new THREE.Raycaster(new THREE.Vector3(x, 2.0, z), new THREE.Vector3(0, -1, 0), 0, 3).intersectObject(g, true)[0]; return h ? h.point.y : sonst;
+}
 function tourStarten(m) {
   const S = m.rundgang; if (!S?.length) return false;
   if (m.schnitt) schnitt('kein'); if (axo) projektion('persp');
-  tour = { m, i: -1, marken: new THREE.Group() }; m.wurzel.add(tour.marken); tourLeiste(true); if (!tuerenOffen) tueren(); tourGehe(0); return true;   // Türen beim Start offen, sonst sieht man die Nachbarräume nicht
+  fahrt = null; rundgangLauf = null;   // ein laufender Anflug nähme die Kamera sonst wieder mit
+  tour = { m, i: 0, marken: new THREE.Group(), fov: m.haus?.fovInnen || 62 }; m.wurzel.add(tour.marken);
+  const l = document.createElement('div'); l.className = 'm-raum'; l.innerHTML = '<b></b><span></span>'; l.querySelector('span').textContent = (SAGT_TOUR[sprache()] || SAGT_TOUR.es).hinweis;
+  wrap.querySelector('.m-buehne').append(l); tour.schild = l; setTimeout(() => l.classList.add('still'), 7000);
+  const st = S[0]; tourSchild(st); tour.laeuft = true;
+  ueberblenden(st.pos, st.ziel, () => { if (!tour) return; tour.laeuft = false; camera.fov = tour.fov; camera.updateProjectionMatrix(); tourBlick(st.pos, tourRichtung(st)); tourPfeile(); });
+  return true;
+}
+function tourSchild(st, wohin) { const b = tour?.schild?.querySelector('b'); if (b) b.textContent = wohin ? '→ ' + tourName(wohin) : tourName(st); melde(''); }
+function ueberblenden(pos, ziel, danach) {   // ohne Laufweg (von außen hinein): kurz abblenden und springen statt durch Wände zu fahren
+  canvas.style.transition = 'opacity .35s'; canvas.style.opacity = '0';
+  setTimeout(() => { camera.position.set(...pos); controls.target.set(...ziel); camera.lookAt(controls.target); controls.update(); danach?.(); canvas.style.opacity = '1'; }, 380);
 }
 function tourPfad(i, j) {   // Laufweg zwischen zwei Halten (Grundriss x, z), in Laufrichtung
   const W = tour?.m.rundgangWege?.wege; if (i == null || !W) return null; const a = W[Math.min(i, j) + '-' + Math.max(i, j)]; return a ? (i < j ? a : [...a].reverse()) : null;
 }
-function laufen(pfad, st, danach) {   // den Weg entlang gehen: je Abschnitt eine kurze Fahrt in Augenhöhe, Blick voraus; am Ende Blick des Halts
-  const y = st.pos[1]; let k = 1;
-  const schritt = () => { if (!tour) return; if (k >= pfad.length) { fahren(st.pos, st.ziel, 0.6, danach); return; }
-    const p = pfad[k], q = pfad[Math.min(k + 1, pfad.length - 1)], d = Math.hypot(p[0] - camera.position.x, p[1] - camera.position.z), r = [q[0] - p[0], q[1] - p[1]], l = Math.hypot(...r) || 1;
-    k++; fahren([p[0], y, p[1]], [p[0] + r[0] / l * 3, y - 0.15, p[1] + r[1] / l * 3], Math.max(0.25, d / 1.6), schritt); };
-  schritt();
-}
-function tourName(st) { return typeof st.name === 'object' ? st.name[sprache()] || st.name.es : st.name; }
-function tourBlick(st) {   // Umsehen am Standpunkt: Drehpunkt 1 cm vor dem Auge, Ziehen dreht den Blick
-  const p = new THREE.Vector3(...st.pos), d = new THREE.Vector3(...st.ziel).sub(p).normalize();
-  controls.target.copy(p).addScaledVector(d, 0.01); controls.enablePan = false; controls.enableZoom = false; controls.rotateSpeed = -0.35; controls.minDistance = 0; controls.maxPolarAngle = Math.PI - 0.05; controls.update();
+function tourBlick(pos, dir) {   // Umsehen am Standpunkt: Drehpunkt 1 cm vor dem Auge, Ziehen dreht den Blick, kein Verschieben, kein Zoom; Blick mindestens 14° nach unten, dort liegen die Pfeile
+  const d = dir.clone().normalize(); if (d.y > -0.24) { const hz = Math.hypot(d.x, d.z) || 1; d.set(d.x / hz * 0.97, -0.24, d.z / hz * 0.97).normalize(); }
+  camera.position.set(...pos); controls.target.copy(camera.position).addScaledVector(d, 0.01);
+  controls.enabled = true; controls.enablePan = false; controls.enableZoom = false; controls.rotateSpeed = -0.35; controls.minDistance = 0; controls.maxPolarAngle = Math.PI - 0.05; controls.update();
 }
 function tourGehe(j) {
-  const t = tour; if (!t) return; const S = t.m.rundgang; j = (j + S.length) % S.length; if (j === t.i) return; t.i = j; const st = S[j];
-  for (const c of [...t.marken.children]) { t.marken.remove(c); c.geometry?.dispose(); c.material?.map?.dispose(); c.material?.dispose(); }
-  melde(tourName(st)); tour.leiste?.querySelector('.t-name') && (tour.leiste.querySelector('.t-name').textContent = (j + 1) + ' / ' + S.length + ' · ' + tourName(st));
-  const p0 = camera.position.toArray(), weg = Math.hypot(...st.pos.map((v, k) => v - p0[k])), fertig = () => { tourBlick(st); setTimeout(() => { if (tour?.i === j) tourMarken(); }, 700); };   // Marken nach dem Türschwenk
-  controls.enablePan = false; controls.enableZoom = false;
-  const pfad = tourPfad(t.vorher, j);
-  if (weg < 0.05) fertig(); else if (pfad) laufen(pfad, st, fertig); else if (strahl(p0, st.pos) < weg) { rundgangLauf = t.m; blenden(st.pos, st.ziel, () => { rundgangLauf = null; fertig(); }); } else fahren(st.pos, st.ziel, Math.min(2.6, 0.9 + weg * 0.25), fertig);
-  t.vorher = j;
+  const t = tour; if (!t || t.laeuft) return; const S = t.m.rundgang; j = (j + S.length) % S.length; if (j === t.i) return;
+  const von = S[t.i], st = S[j], pfad = tourPfad(t.i, j); pfeileWeg(); t.laeuft = true; tourSchild(st);
+  if (!pfad) { ueberblenden(st.pos, st.ziel, () => { if (tour !== t) return; t.laeuft = false; t.i = j; tourBlick(st.pos, tourRichtung(st)); tourPfeile(); }); return; }
+  const P = pfad.map(([x, z]) => new THREE.Vector3(x, 0, z)).filter((v, k, A) => !k || v.distanceTo(A[k - 1]) > 0.04);
+  const kurve = new THREE.CatmullRomCurve3(P, false, 'centripetal'), L = kurve.getLength(), dauer = Math.min(7, 0.7 + L / 1.35) * 1000, t0 = performance.now();
+  // Augenhöhe = Boden unter der Bahn + Höhe über dem Boden der beiden Halte (Bodenhöhen vorab alle 25 cm, Terrassen liegen höher)
+  const hA = von.pos[1] - bodenHoehe(von.pos[0], von.pos[2], 0), hB = st.pos[1] - bodenHoehe(st.pos[0], st.pos[2], 0), n = Math.max(2, Math.ceil(L / 0.25)), H = [];
+  for (let k = 0; k <= n; k++) { const q = kurve.getPointAt(k / n); H.push(bodenHoehe(q.x, q.z, H.at(-1) ?? 0)); }
+  const hoehe = u => { const f = u * n, k = Math.min(n - 1, Math.floor(f)); return H[k] + (H[k + 1] - H[k]) * (f - k); };
+  const blick = camera.getWorldDirection(new THREE.Vector3()), richtung = new THREE.Vector3(blick.x, 0, blick.z).normalize(), zielH = tourRichtung(st).setY(0).normalize();
+  const ende = kurve.getPointAt(1).sub(kurve.getPointAt(Math.max(0, 1 - 1.5 / L))).setY(0).normalize(), passt = ende.dot(zielH) > Math.cos(70 * Math.PI / 180) || strahl(st.pos, [st.pos[0] + ende.x * 5, st.pos[1] - 0.3, st.pos[2] + ende.z * 5]) < 2.5;   // in Gehrichtung verstellt (Schrank, Tür): doch zum Blick des Halts
+  controls.enabled = false;
+  fahrt = () => {
+    const u = Math.min(1, (performance.now() - t0) / dauer), e = 0.5 - 0.5 * Math.cos(Math.PI * u), p = kurve.getPointAt(e);
+    const vor = kurve.getPointAt(Math.min(1, e + Math.min(0.5, 0.9 / L))).sub(kurve.getPointAt(Math.max(0, e - (0.3 + 1.2 * e) / L))); vor.y = 0;   // am Ende die letzten 1,5 m, nicht der letzte Schnipsel
+    if (vor.lengthSq() > 1e-6) richtung.copy(vor.normalize());   // Gehrichtung behalten wie Street View, Blick leicht nach unten (dort liegen die Pfeile)
+    const w = Math.max(0, (e - 0.55) / 0.45) * (passt ? 1 : 0), soll = richtung.clone().multiplyScalar(1 - w).addScaledVector(zielH, w).normalize(); soll.y = -0.12 - 0.12 * e; soll.normalize();   // zum Blick des Halts nur, wenn er ungefähr in Gehrichtung liegt
+    blick.lerp(soll, u >= 1 ? 1 : 0.09).normalize();
+    camera.position.set(p.x, hoehe(e) + hA + (hB - hA) * e, p.z); controls.target.copy(camera.position).addScaledVector(blick, 0.01); camera.lookAt(controls.target);
+    if (u >= 1) { fahrt = null; t.laeuft = false; t.i = j; tourBlick(camera.position.toArray(), blick); tourPfeile(); }
+  };
 }
-function tourMarken() {   // Bodenmarke zu jedem Halt, den man von hier frei sieht (bis 10 m): Ring, Pfeil, Name
-  const t = tour; if (!t) return; const S = t.m.rundgang, hier = S[t.i];
-  const nb = t.m.rundgangWege?.nachbarn?.[t.i];
-  S.forEach((st, k) => {
-    if (k === t.i) return; const a = new THREE.Vector3(...hier.pos); let b = new THREE.Vector3(...st.pos); const d = b.distanceTo(a);
-    if (nb) { if (!nb.includes(k)) return; const p = tourPfad(t.i, k); if (p) { let rest = 1.8; for (let n = 1; n < p.length; n++) { const s0 = p[n - 1], s1 = p[n], l = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]); if (l >= rest) { b = new THREE.Vector3(s0[0] + (s1[0] - s0[0]) * rest / l, 0, s0[1] + (s1[1] - s0[1]) * rest / l); break; } rest -= l; } } }   // Marke 1,8 m den Weg entlang (Tür, Flur)
-    else if (d > 10 || strahl(hier.pos, st.pos) < d - 0.3) return;
-    const g = new THREE.Group(); g.position.set(b.x, 0.03, b.z); g.userData.halt = k;
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.26, 0.34, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.renderOrder = 10;
-    const scheibe = new THREE.Mesh(new THREE.CircleGeometry(0.26, 48), new THREE.MeshBasicMaterial({ color: 0x00b4c8, transparent: true, opacity: 0.55, depthTest: false })); scheibe.rotation.x = -Math.PI / 2; scheibe.renderOrder = 10;
-    const pfeil = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.24, 3), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false })); pfeil.rotation.x = -Math.PI / 2; pfeil.position.y = 0.01; pfeil.renderOrder = 11;
-    const w = Math.atan2(b.x - a.x, b.z - a.z); const dreh = new THREE.Group(); dreh.rotation.y = w; dreh.add(pfeil); g.add(scheibe, ring, dreh);
-    const c = document.createElement('canvas'); c.width = 512; c.height = 96; const x = c.getContext('2d'); x.font = 'bold 44px Helvetica, Arial, sans-serif'; const tw = x.measureText(tourName(st)).width;
-    x.fillStyle = 'rgba(255,255,255,.92)'; x.fillRect(256 - tw / 2 - 18, 12, tw + 36, 70); x.fillStyle = '#111'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(tourName(st), 256, 48);
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true, sizeAttenuation: false })); sp.scale.set(0.2, 0.0375, 1); sp.position.y = 0.45;   // feste Bildschirmgröße, nah nicht riesig sp.renderOrder = 12; g.add(sp);
-    g.traverse(o => { o.userData.halt = k; }); t.marken.add(g);
-  });
+function pfeileWeg() { const t = tour; if (!t) return; for (const c of [...t.marken.children]) { if (!c.userData.richtung) continue; t.marken.remove(c); c.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); }); } }
+const PFEIL_FORM = (() => { const f = new THREE.Shape(); f.moveTo(0, 0.3); f.lineTo(0.3, 0.02); f.lineTo(0.3, -0.13); f.lineTo(0, 0.15); f.lineTo(-0.3, -0.13); f.lineTo(-0.3, 0.02); f.closePath(); return f; })();
+function pfeil() {   // flacher Winkelpfeil wie bei Street View: weiß mit weichem dunklem Rand, immer sichtbar, zeigt in lokal +z
+  const g = new THREE.Group(), geo = new THREE.ShapeGeometry(PFEIL_FORM); geo.rotateX(Math.PI / 2);
+  const schatten = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthTest: false, side: THREE.DoubleSide })); schatten.scale.setScalar(1.18); schatten.position.set(0, -0.002, -0.02); schatten.renderOrder = 10;
+  const weiss = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.94, depthTest: false, side: THREE.DoubleSide })); weiss.renderOrder = 11;
+  g.add(schatten, weiss); return g;
 }
-function tourLeiste(an) {
-  const b = wrap.querySelector('.m-buehne'); tour?.leiste?.remove(); if (!an) return; const T = SAGT_TOUR[sprache()] || SAGT_TOUR.es;
-  const l = document.createElement('div'); l.className = 'm-tour';
-  l.innerHTML = `<button type="button" data-t="zurueck" aria-label="${T.zurueck}">‹ <span class="t-wort">${T.zurueck}</span></button><span class="t-name"></span><button type="button" data-t="weiter"><span class="t-wort">${T.weiter}</span> ›</button><button type="button" data-t="tueren">${T.tueren}</button><button type="button" data-t="ende" aria-label="${T.ende}">×</button>`;
-  l.addEventListener('click', e => { const k = e.target.closest('button')?.dataset.t; if (!k || !tour) return; e.stopPropagation();
-    if (k === 'weiter') tourGehe(tour.i + 1); if (k === 'zurueck') tourGehe(tour.i - 1); if (k === 'tueren') tueren(); if (k === 'ende') tourEnde(); });
-  b.append(l); tour.leiste = l;
+function pfadPunkt(p, weit) { let rest = weit; for (let n = 1; n < p.length; n++) { const a = p[n - 1], b = p[n], l = Math.hypot(b[0] - a[0], b[1] - a[1]); if (l >= rest) return [a[0] + (b[0] - a[0]) * rest / l, a[1] + (b[1] - a[1]) * rest / l]; rest -= l; } return p.at(-1); }
+function tourPfeile() {   // je Richtung ein Pfeil auf dem Weg, bis 3 m voraus (näher liegt er unter dem Bildrand); durch dieselbe Tür (unter 28°) nur der nähere Halt
+  const t = tour; if (!t) return; pfeileWeg(); const c = camera.position, boden = bodenHoehe(c.x, c.z, c.y - 1.6) + 0.03, kand = [];
+  for (const k of t.m.rundgangWege?.nachbarn?.[t.i] || []) {
+    const p = tourPfad(t.i, k) || [[c.x, c.z], [t.m.rundgang[k].pos[0], t.m.rundgang[k].pos[2]]]; let L = 0; for (let n = 1; n < p.length; n++) L += Math.hypot(p[n][0] - p[n - 1][0], p[n][1] - p[n - 1][1]);
+    const q1 = pfadPunkt(p, 1.2), q = pfadPunkt(p, Math.max(Math.min(1.2, L), Math.min(3.0, L - 0.4))), d = new THREE.Vector2(q1[0] - c.x, q1[1] - c.z), r = new THREE.Vector2(q[0] - c.x, q[1] - c.z);
+    if (d.lengthSq() > 1e-4 && r.lengthSq() > 1e-4) kand.push({ k, d: d.normalize(), q, r: r.normalize(), L });
+  }
+  const gesetzt = [];
+  for (const { k, d, q, r } of kand.sort((a, b) => a.L - b.L)) {
+    if (gesetzt.some(e => e.dot(d) > Math.cos(28 * Math.PI / 180))) continue; gesetzt.push(d);
+    const g = pfeil(); g.scale.setScalar(1.35); g.userData.grund = 1.35; g.position.set(q[0], bodenHoehe(q[0], q[1], boden - 0.03) + 0.03, q[1]); g.rotation.y = Math.atan2(r.x, r.y); g.traverse(o => { o.userData.halt = k; }); g.userData.richtung = d; t.marken.add(g);
+  }
 }
 function tourEnde() {
-  const t = tour; if (!t) return; t.m.wurzel.remove(t.marken); tourLeiste(false); tour = null; rundgangLauf = null; fahrt = null;
-  controls.enablePan = true; controls.enableZoom = true; controls.rotateSpeed = 1; controls.minDistance = t.m.nahst; controls.maxPolarAngle = Math.PI / 2 - 0.02; blick(t.m.start); melde('');
+  const t = tour; if (!t) return; pfeileWeg(); t.m.wurzel.remove(t.marken); t.schild?.remove(); tour = null; rundgangLauf = null; fahrt = null; canvas.style.opacity = '1';
+  controls.enabled = true; controls.enablePan = true; controls.enableZoom = true; controls.rotateSpeed = 1; controls.minDistance = t.m.nahst; controls.maxPolarAngle = Math.PI / 2 - 0.02; blick(t.m.start); melde('');
 }
-const SAGT_TOUR = { es: { zurueck: 'Anterior', weiter: 'Siguiente', tueren: 'Puertas', ende: 'Salir del recorrido' }, en: { zurueck: 'Previous', weiter: 'Next', tueren: 'Doors', ende: 'Leave the walk' }, de: { zurueck: 'Zurück', weiter: 'Weiter', tueren: 'Türen', ende: 'Rundgang beenden' } };
-let tuerenOffen = false;
-function tueren() {   // Türblätter (Gruppe „tueren“, je Tür ein Knoten mit userData.angel) um ihre Angel drehen; ohne eigene Türgruppe nur Meldung
-  const g = aktiv.gruppen.tueren; tuerenOffen = !tuerenOffen; if (!g) return;
-  g.traverse(o => { const a = o.userData.angel; if (!a) return; o.userData.ziel = tuerenOffen ? a.winkel : 0; });
+function tourRichtungGehen(d, grenze) {   // zum Pfeil, der am besten in Richtung d (Grundriss) zeigt, wenn der Winkel unter grenze (Grad) bleibt
+  const t = tour; if (!t || t.laeuft) return false; let best = null, bw = Math.cos(grenze * Math.PI / 180);
+  for (const g of t.marken.children) { if (!g.userData.richtung) continue; const w = g.userData.richtung.dot(d); if (w > bw) { bw = w; best = g; } }
+  if (best) tourGehe(best.userData.halt); return !!best;
 }
-// Tipp auf eine Bodenmarke: dorthin gehen (nur ein Tipp, kein Ziehen)
-{ let ab = null; canvas.addEventListener('pointerdown', e => { ab = [e.clientX, e.clientY]; });
-  canvas.addEventListener('pointerup', e => { if (!tour || !ab || Math.hypot(e.clientX - ab[0], e.clientY - ab[1]) > 6) return; const r = canvas.getBoundingClientRect(), ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), camera); const h = ray.intersectObjects(tour.marken.children, true)[0];
-    if (h && h.object.userData.halt != null) tourGehe(h.object.userData.halt); }); }
+function tourStrahl(e) { const r = canvas.getBoundingClientRect(), ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), camera); return ray; }
+const tourPfeilListe = () => tour.marken.children.filter(g => g.userData.richtung);
+// Tipp auf einen Pfeil: dorthin gehen; Tipp auf den Boden: in diese Richtung (nur ein Tipp, kein Ziehen); Maus über dem Boden zeigt einen Ring wie Street View
+{ let ab = null, ring = null, anstehend = false;
+  canvas.addEventListener('pointerdown', e => { ab = [e.clientX, e.clientY]; });
+  canvas.addEventListener('pointerup', e => {
+    if (!tour || tour.laeuft || !ab || Math.hypot(e.clientX - ab[0], e.clientY - ab[1]) > 6) return; const ray = tourStrahl(e);
+    const h = ray.intersectObjects(tourPfeilListe(), true)[0]; if (h && h.object.userData.halt != null) { tourGehe(h.object.userData.halt); return; }
+    const b = tour.m.gruppen.architektur && ray.intersectObject(tour.m.gruppen.architektur, true)[0]; if (!b) return;
+    const d = new THREE.Vector2(b.point.x - camera.position.x, b.point.z - camera.position.z); if (d.lengthSq() > 0.01) tourRichtungGehen(d.normalize(), 50);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!tour || e.buttons || e.pointerType !== 'mouse' || anstehend) return; anstehend = true;
+    requestAnimationFrame(() => { anstehend = false; if (!tour || tour.laeuft) { if (ring) ring.visible = false; return; } const ray = tourStrahl(e), L = tourPfeilListe();
+      for (const g of L) g.scale.setScalar(g.userData.grund || 1);
+      const h = ray.intersectObjects(L, true)[0]; canvas.style.cursor = h ? 'pointer' : '';
+      if (h) { let g = h.object; while (g.parent !== tour.marken) g = g.parent; g.scale.setScalar((g.userData.grund || 1) * 1.15); tourSchild(null, tour.m.rundgang[g.userData.halt]); if (ring) ring.visible = false; return; }
+      tourSchild(tour.m.rundgang[tour.i]);
+      const b = tour.m.gruppen.architektur && ray.intersectObject(tour.m.gruppen.architektur, true)[0];
+      if (!ring) { ring = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.22, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthTest: false })); ring.rotation.x = -Math.PI / 2; ring.renderOrder = 9; }
+      if (ring.parent !== tour.marken) tour.marken.add(ring);
+      const boden = b && b.face && b.face.normal.clone().transformDirection(b.object.matrixWorld).y > 0.8; ring.visible = !!boden; if (boden) ring.position.copy(b.point).add(new THREE.Vector3(0, 0.02, 0));
+    });
+  });
+  canvas.addEventListener('wheel', e => { if (!tour) return; e.preventDefault(); tour.fov = Math.min(80, Math.max(30, tour.fov * Math.exp(e.deltaY * 0.0012))); camera.fov = tour.fov; camera.updateProjectionMatrix(); }, { passive: false });
+  addEventListener('keydown', e => {
+    if (!tour || tour.laeuft || /input|textarea|select/i.test(document.activeElement?.tagName || '')) return; const r = canvas.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) return;
+    const v = camera.getWorldDirection(new THREE.Vector3()), d = new THREE.Vector2(v.x, v.z).normalize();
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); tourRichtungGehen(e.key === 'ArrowUp' ? d : d.negate(), 75); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const w = (e.key === 'ArrowLeft' ? 1 : -1) * 0.35, x = v.x * Math.cos(w) + v.z * Math.sin(w), z = -v.x * Math.sin(w) + v.z * Math.cos(w); controls.target.copy(camera.position).add(new THREE.Vector3(x, v.y, z).normalize().multiplyScalar(0.01)); controls.update(); }
+  });
+}
 function rundgang(m) {
   return tourStarten(m);
 }
@@ -244,7 +292,7 @@ function rundgangAlt(m) {
 let NACH = null;
 function zeichnen() {
   const m = aktiv, A = m?.bild?.ao;
-  if (!A || SCHWACH || m.schnitt || !camera.isPerspectiveCamera || !m.hausInnen) { renderer.render(scene, camera); return; }
+  if (!A || SCHWACH || m.ebenen?.length || !camera.isPerspectiveCamera || !m.hausInnen) { renderer.render(scene, camera); return; }
   if (!NACH) { const c = new EffectComposer(renderer), rp = new RenderPass(scene, camera), g = new GTAOPass(scene, camera, canvas.clientWidth, canvas.clientHeight);
     g.updateGtaoMaterial({ radius: A.radius ?? 0.5, distanceExponent: A.exponent ?? 1.5, thickness: A.dicke ?? 1, scale: A.staerke ?? 1, samples: 16 }); g.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 16 }); g.blendIntensity = A.mischung ?? 1;
     g.overrideVisibility = function () { GTAOPass.prototype.overrideVisibility.call(this); this.scene.traverse(o => { if (o.userData.ohneAO) o.visible = false; }); };   // Glas nicht verschatten (sonst schwarze Scheiben)
@@ -262,7 +310,7 @@ function tuerenBewegen() { aktiv?.gruppen.tueren?.traverse(o => { const a = o.us
 // nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
 function hausWahl() { const m = aktiv, h = m?.haus; if (!h) return; if (!h.geladen) { h.geladen = true; for (const k of h.wohnung) lade(k); }   // Wohnung schon beim Anflug laden, unsichtbar
   const b = h.innen, p = camera.position, kasten = p.x > b[0] && p.x < b[3] && p.y > b[1] && p.y < b[4] && p.z > b[2] && p.z < b[5]; const innen = !!m.schnitt || (!!h.nah && p.length() < h.nah) || kasten;
-  if (camera.isPerspectiveCamera && h.fovInnen && camera.fov !== (kasten ? h.fovInnen : FOV)) { camera.fov = kasten ? h.fovInnen : FOV; camera.updateProjectionMatrix(); }   // in der Wohnung weiter Bildwinkel (4.11.: 38° wirkt in Räumen eng)
+  if (!tour && camera.isPerspectiveCamera && h.fovInnen && camera.fov !== (kasten ? h.fovInnen : FOV)) { camera.fov = kasten ? h.fovInnen : FOV; camera.updateProjectionMatrix(); }   // in der Wohnung weiter Bildwinkel (4.11.: 38° wirkt in Räumen eng)
   if (innen === m.hausInnen && m.schnitt === m.hausSchnitt && kasten === m.hausKasten) return; m.hausInnen = innen; m.hausSchnitt = m.schnitt; m.hausKasten = kasten;
   for (const k of Object.keys(m.dateien)) zeige(k); for (const o of m.eigenhaus || []) o.visible = !innen;
   // von außen ohne Schnitt: Deckenplatte der Wohnung aus (h.dach = Höhe unter der Platte), darüber liegt das Google-Dach; von innen bleibt die Decke
@@ -303,6 +351,7 @@ function aktiviere(name) {
 }
 // Sichtbar ist eine Gruppe, wenn ihr Schalter an ist; Gruppen des Zustands folgen dem Zustand
 function sollSichtbar(k) { const m = aktiv;
+  if (k === 'decke' && m.schnitt && m.schnitte[m.schnitt] === 'decke') return false;   // „Sin techo“ (4.11., Tassilo: nicht schneiden, nur die Decke abheben)
   if (k === 'barrio') return !!m.barrioAn;   // El barrio: abstrakte Stadt statt Fotostadt und Wohnung
   if (m.barrioAn && (k === 'stadt' || k === 'kacheln' || k === m.haus?.schnitt || k === m.haus?.offen || m.haus?.wohnung.includes(k) || m.haus?.nachbarn?.includes(k))) return false; if (m.zustaende) { const z = m.zustaende[m.zustand]; if (k in z && !z[k]) return false; }
   const h = m.haus; if (h && (k === h.ganz || k === h.schnitt || k === h.offen)) { const w = !m.hausInnen ? h.ganz : h.offen && m.schnitt === 'planta' ? h.offen : h.schnitt; return m.sichtbar.stadt !== false && k === w; }   // folgt dem Schalter Stadt; h.offen: ohne Decke von oben
@@ -369,7 +418,7 @@ async function lade(k) {
       if (!glas && !kappenGruppe_ && !m.ohneSchnittflaechen?.includes(k)) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }   // wie bisher (Hochhaus: rote Tragwerksflächen in der Strukturansicht)
       if (!glas && kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
     }
-    d.scene.traverse(o => { const t = /^tuer\|(-?\d+)/.exec(o.name); if (t) o.userData.angel = { winkel: +t[1] * Math.PI / 180 }; });   // Türflügel (tools/stadt_tueren.mjs): Drehpunkt = Angel
+    d.scene.traverse(o => { const t = /^tuer\|(-?\d+)/.exec(o.name); if (t) { o.userData.angel = { winkel: +t[1] * Math.PI / 180 }; o.userData.ziel = o.userData.angel.winkel; o.rotation.y = o.userData.ziel; } });   // 4.11. (Tassilo): Türen immer offen   // Türflügel (tools/stadt_tueren.mjs): Drehpunkt = Angel
     g.add(d.scene); g.visible = m === aktiv ? sollSichtbar(k) : true;
     if (m.versatz?.[k]) g.position.set(...m.versatz[k]);   // z. B. Stadt: Straßenniveau unter dem Wohnungsgeschoss
     if (m.ebenen?.length) clipSetzen(m);   // nachgeladene Gruppe in den laufenden Schnitt
@@ -435,15 +484,17 @@ let kappenAn = true;
 window.formaKappen = an => { if (an === undefined) { const m = aktiv; return { stencil: !!renderer.getContext().getContextAttributes().stencil, n: m.schnittflaechen.length, sichtbar: m.schnittflaechen.filter(f => f.visible).length, kappe: m.kappe ? { sichtbar: m.kappe.visible, pos: m.kappe.position.toArray().map(v => +v.toFixed(2)) } : null }; } kappenAn = !!an; for (const mm of Object.values(MODELLE)) { if (mm.kappe) mm.kappe.visible = kappenAn && !!mm.schnitt; for (const f of mm.schnittflaechen || []) f.visible = kappenAn && !!mm.schnitt; for (const mat of mm.schnittMats || []) { mat.side = kappenAn && mm.schnitt ? THREE.FrontSide : THREE.DoubleSide; mat.needsUpdate = true; } } };   // Prüfregel: Kappen aus und an
 function schnitt(name) {
   const m = aktiv, s = m.schnitte[name]; if (name !== 'kein' && !s) return false; m.schnitt = s ? name : null;
-  const ebene = s ? new THREE.Plane(new THREE.Vector3(s[0], s[1], s[2]), s[3]) : null;
+  // schnitte: { name: [nx, ny, nz, d] } schneidet, { name: 'decke' } blendet nur die Gruppe „decke“ aus (Wände, Türen, Möbel bleiben ganz)
+  const ebene = Array.isArray(s) ? new THREE.Plane(new THREE.Vector3(s[0], s[1], s[2]), s[3]) : null;
   m.ebenen = ebene ? [ebene] : []; renderer.clippingPlanes = []; renderer.localClippingEnabled = true; clipSetzen(m);
-  for (const mm of Object.values(MODELLE)) for (const f of mm.schnittflaechen || []) f.visible = !!s;
-  for (const mat of m.schnittMats || []) { mat.side = s ? THREE.FrontSide : THREE.DoubleSide; mat.needsUpdate = true; }
+  for (const mm of Object.values(MODELLE)) for (const f of mm.schnittflaechen || []) f.visible = !!ebene;
+  for (const mat of m.schnittMats || []) { mat.side = ebene ? THREE.FrontSide : THREE.DoubleSide; mat.needsUpdate = true; }
+  for (const k of Object.keys(m.dateien)) zeige(k);
   // Kappenebene: groß genug für das ganze Modell, liegt genau in der Schnittebene, schaut zur sichtbaren Seite; löscht danach den Stencil
   if (!m.kappe) { m.kappe = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), KAPPE); m.kappe.renderOrder = 2; m.kappe.frustumCulled = false; m.kappe.onAfterRender = rd => rd.clearStencil(); m.wurzel.add(m.kappe); }
   m.kappe.visible = !!ebene && kappenAn;
   if (ebene) { m.kappe.position.copy(ebene.normal).multiplyScalar(-ebene.constant); m.kappe.lookAt(m.kappe.position.clone().add(ebene.normal)); }
-  strukturAnsicht(!!s);
+  strukturAnsicht(!!ebene);
   return true;
 }
 
@@ -512,7 +563,7 @@ function tun(a) {
 
 // Zustand lesen für die Prüfregel tools/pruefe_saetze.mjs (nur lesen, plus Zurücksetzen)
 window.formaZustand = () => { const m = aktiv; if (!m || !camera) return null; const sichtbar = {}; for (const k of Object.keys(m.dateien)) if (k !== 'kacheln' && k !== 'fern') sichtbar[k] = sollSichtbar(k);
-  return { modell: m.name, sichtbar, zustand: m.zustand || null, schnitt: m.schnitt || 'kein', struktur: (() => { let d = null; m.gruppen.gebaeude?.traverse(o => { if (d === null && o.isMesh && o.material !== SCHNITT && !o.material.userData.glas) d = o.material.opacity; }); return d !== null && d < 0.2; })(), abstand: camera.position.distanceTo(controls.target), hoehe: camera.position.y, status: status?.textContent || '', zuruecksetzen: undefined }; };
+  return { modell: m.name, sichtbar, zustand: m.zustand || null, schnitt: m.schnitt || 'kein', struktur: (() => { let d = null; m.gruppen.gebaeude?.traverse(o => { if (d === null && o.isMesh && o.material !== SCHNITT && !o.material.userData.glas) d = o.material.opacity; }); return d !== null && d < 0.2; })(), abstand: camera.position.distanceTo(controls.target), hoehe: camera.position.y, ebenen: m.ebenen?.length || 0, status: status?.textContent || '', zuruecksetzen: undefined }; };
 window.formaZustand.zuruecksetzen = () => { tun({ alles: true }); melde(''); };
 window.formaZustand.kamera = (pos, ziel) => kamera(pos, ziel);
 // Prüfregel Rundgang (4.11.): freier Blick von pos Richtung ziel bis zur ersten Fläche der Wohnung, in Metern (Infinity: nichts getroffen)
@@ -522,7 +573,10 @@ window.formaZustand.treffer = (pos, ziel) => { const o = new THREE.Vector3(...po
   scene.traverseVisible(x => { if (x.isMesh) z.push(x); }); const h = r.intersectObjects(z, false)[0]; if (!h) return null; const kette = []; let x = h.object; while (x) { kette.push(x.name || x.type); x = x.parent; }
   const g = Object.entries(aktiv.gruppen).find(([, gr]) => { let y = h.object; while (y) { if (y === gr) return true; y = y.parent; } return false; })?.[0];
   return { abstand: +h.distance.toFixed(2), gruppe: g, kette: kette.slice(0, 6), punkt: h.point.toArray().map(v => +v.toFixed(2)) }; };
-window.formaZustand.tour = () => tour ? { halt: tour.i, marken: tour.marken.children.length } : null;
+window.formaZustand.tour = () => tour ? { halt: tour.i, marken: tourPfeilListe().length, laeuft: !!tour.laeuft, leiste: !!wrap.querySelector('.m-tour'), raum: tour.schild?.querySelector('b')?.textContent, fov: camera.fov } : null;
+window.formaZustand.tuerenOffen = () => { let n = 0; aktiv.gruppen.tueren?.traverse(o => { if (o.userData.angel && Math.abs(o.rotation.y) > 1) n++; }); return n; };
+window.formaZustand.pfeilBild = () => tour ? tourPfeilListe().map(g => { const w = g.getWorldPosition(new THREE.Vector3()), v = w.clone().project(camera); return { halt: g.userData.halt, welt: w.toArray().map(x => +x.toFixed(2)), bild: [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(3)], sichtbar: g.visible && g.parent?.visible && g.parent.parent?.visible, kam: camera.position.toArray().map(x => +x.toFixed(2)) }; }) : null;
+window.formaZustand.tourPfeile = () => tour ? tourPfeilListe().map(g => g.userData.halt) : [];
 window.formaZustand.tourGehe = j => tourGehe(j);
 window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
 // El barrio (4.11., Tassilo: „Madrid abstrahiert, Häuser als Blöcke aus dem Kataster, Supermärkte, Parks, Spielplätze, Metro, Bus, Züge, Flughafen,
