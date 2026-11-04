@@ -198,3 +198,26 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 /* 4.11. (Tassilo: Pläne abgeschnitten): beide Pläne ganz, übereinander, volle Breite */
 .lieferung .plaene{display:grid;gap:28px;margin-bottom:28px}
 .lieferung .plaene img{width:100%;height:auto;aspect-ratio:auto;object-fit:contain;border:1px solid var(--linie);background:#fff}
+/* El barrio als eigene Karte (4.11.) */
+.barrio .b-karte{position:relative;aspect-ratio:16/10;width:100%;background:#f3f1ec;overflow:hidden;margin-top:18px}
+.barrio .b-karte canvas{width:100%;height:100%;display:block;touch-action:none}
+.barrio .b-info{position:absolute;left:12px;top:12px;width:min(320px,calc(100% - 24px));background:#fff;padding:14px 16px 12px;box-shadow:0 2px 12px rgba(0,0,0,.14);font-size:14px}
+.barrio .b-info[hidden],.barrio .b-tip[hidden]{display:none}
+.barrio .b-info h3{font-size:18px;margin:2px 0 6px;padding-right:22px}
+.barrio .b-info h3 span{font-weight:400;color:var(--grau);font-size:14px}
+.barrio .b-info .b-k{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--grau);display:flex;align-items:center;gap:6px}
+.barrio .b-info .b-k::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--f)}
+.barrio .b-info .b-zeit b{font-size:22px}
+.barrio .b-info p{margin:3px 0}
+.barrio .b-info .b-h{color:var(--grau);font-size:13px}
+.barrio .b-info .b-links a{color:var(--akzent)}
+.barrio .b-zu{position:absolute;right:8px;top:6px;border:0;background:none;font-size:22px;cursor:pointer;color:var(--grau)}
+.barrio .b-tip{position:absolute;pointer-events:none;background:rgba(17,17,17,.86);color:#fff;font-size:13px;padding:4px 8px;white-space:nowrap}
+.barrio .b-kat{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px 18px;margin-top:16px}
+.barrio .b-fam p{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--grau);margin-bottom:6px}
+.barrio .b-fam button{display:flex;align-items:center;gap:8px;width:100%;font:inherit;font-size:14px;text-align:left;padding:6px 8px;margin-bottom:4px;border:1px solid var(--linie);background:#fff;cursor:pointer;opacity:.55}
+.barrio .b-fam button.on{opacity:1;border-color:var(--f)}
+.barrio .b-fam button i{width:12px;height:12px;border-radius:50%;background:var(--f);flex:none}
+.barrio .b-fam button span{margin-left:auto;color:var(--grau);font-size:13px}
+.barrio .b-quelle{font-size:12px;color:var(--hell);margin-top:10px}
+@media (max-width:759px){.barrio .b-karte{aspect-ratio:1/1}}

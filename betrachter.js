@@ -175,10 +175,11 @@ async function spiegelBauen(m, netze) {
 }
 // Tipp auf eine Tür oder Schranktür öffnet oder schließt sie, wenn keine Wand davor liegt (auch im Rundgang)
 function tuerTipp(ray, nurPruefen) {
-  const m = aktiv, G = ['tueren', 'schraenke'].map(k => m?.gruppen[k]).filter(g => g?.visible); if (!G.length) return false;
+  const m = aktiv, G = ['tueren', 'schraenke', 'fenster'].map(k => m?.gruppen[k]).filter(g => g?.visible); if (!G.length) return false;
   const h = ray.intersectObjects(G, true)[0]; if (!h || h.distance > 8) return false;
   const w = ray.intersectObjects(['architektur', 'einbauten'].map(k => m.gruppen[k]).filter(g => g?.visible), true)[0]; if (w && w.distance < h.distance - 0.03) return false;
-  let o = h.object; while (o && !o.userData.angel) o = o.parent; if (!o) return false; if (nurPruefen) return true;
+  let o = h.object; while (o && !o.userData.angel && !o.userData.schub) o = o.parent; if (!o) return false; if (nurPruefen) return true;
+  if (o.userData.schub) { if (!o.userData.schub.t) o.userData.schub.t = 0; o.userData.ziel = o.userData.ziel > 0.5 ? 0 : 1; return true; }
   const A = o.userData.angel; o.userData.ziel = Math.abs((o.userData.ziel ?? A.zu) - A.offen) < 0.01 ? A.zu : A.offen; return true;
 }
 // Rundgang wie Street View (4.11., Tassilo: „Pfeile am Boden wie bei Google Maps, viel smoother, rechts und links drehen; unten keine Leiste, nur das
@@ -263,17 +264,25 @@ function pfeil() {   // flacher Winkelpfeil wie bei Street View: weiß mit weich
   const neig = new THREE.Group(); neig.rotation.x = -0.75; neig.add(schatten, weiss); g.add(neig); return g;   // Spitze 43° angehoben, zum Betrachter geneigt
 }
 function pfadPunkt(p, weit) { let rest = weit; for (let n = 1; n < p.length; n++) { const a = p[n - 1], b = p[n], l = Math.hypot(b[0] - a[0], b[1] - a[1]); if (l >= rest) return [a[0] + (b[0] - a[0]) * rest / l, a[1] + (b[1] - a[1]) * rest / l]; rest -= l; } return p.at(-1); }
-function tourPfeile() {   // je Richtung ein Pfeil auf dem Weg, bis 3 m voraus (näher liegt er unter dem Bildrand); durch dieselbe Tür (unter 28°) nur der nähere Halt
-  const t = tour; if (!t) return; pfeileWeg(); const c = camera.position, boden = bodenHoehe(c.x, c.z, c.y - 1.6) + 0.03, kand = [];
-  for (const k of t.m.rundgangWege?.nachbarn?.[t.i] || []) {
-    const p = tourPfad(t.i, k) || [[c.x, c.z], [t.m.rundgang[k].pos[0], t.m.rundgang[k].pos[2]]]; let L = 0; for (let n = 1; n < p.length; n++) L += Math.hypot(p[n][0] - p[n - 1][0], p[n][1] - p[n - 1][1]);
+function pfeilAuswahl(i, c) {   // Pfeile am Halt i von der Stelle c: einer je Nachbarhalt
+  const t = tour, kand = [];
+  for (const k of t.m.rundgangWege?.nachbarn?.[i] || []) {
+    const p = tourPfad(i, k) || [[c.x, c.z], [t.m.rundgang[k].pos[0], t.m.rundgang[k].pos[2]]]; let L = 0; for (let n = 1; n < p.length; n++) L += Math.hypot(p[n][0] - p[n - 1][0], p[n][1] - p[n - 1][1]);
     const q1 = pfadPunkt(p, 1.2), q = pfadPunkt(p, Math.max(Math.min(1.2, L), Math.min(2.2, L - 0.4))), d = new THREE.Vector2(q1[0] - c.x, q1[1] - c.z), r = new THREE.Vector2(q[0] - c.x, q[1] - c.z);
     if (d.lengthSq() > 1e-4 && r.lengthSq() > 1e-4) kand.push({ k, d: d.normalize(), q, r: r.normalize(), L });
   }
   const gesetzt = [];
-  for (const { k, d, q, r } of kand.sort((a, b) => a.L - b.L)) {
-    if (gesetzt.some(e => e.dot(d) > Math.cos(28 * Math.PI / 180))) continue; gesetzt.push(d);
-    const g = pfeil(); g.scale.setScalar(1.1); g.userData.grund = 1.1; g.position.set(q[0], bodenHoehe(q[0], q[1], boden - 0.03) + 1.0, q[1]); g.rotation.y = Math.atan2(r.x, r.y); g.traverse(o => { o.userData.halt = k; }); g.userData.richtung = d; t.marken.add(g);   // auf etwa 1 m (4.11., Tassilo: am Boden sah man sie nicht)
+  for (const e of kand.sort((a, b) => a.L - b.L)) {
+    const vor = gesetzt.filter(g => g.d.dot(e.d) > Math.cos(20 * Math.PI / 180)).length;   // jeder Nachbar bekommt einen Pfeil (4.11.: das Auslassen schnitt Räume ab)
+    if (vor) { const p = tourPfad(i, e.k), w = Math.min(2.2 + 0.9 * vor, e.L - 0.3); if (p && w > 1.2) e.q = pfadPunkt(p, w); const s = new THREE.Vector2(-e.d.y, e.d.x).multiplyScalar(0.3 * vor); e.q = [e.q[0] + s.x, e.q[1] + s.y]; }   // gleiche Richtung: weiter vorn, leicht versetzt
+    gesetzt.push(e);
+  }
+  return gesetzt;
+}
+function tourPfeile() {   // Pfeile auf dem Weg, bis 2,2 m voraus, auf 70 cm Höhe
+  const t = tour; if (!t) return; pfeileWeg(); const c = camera.position, boden = bodenHoehe(c.x, c.z, c.y - 1.6) + 0.03;
+  for (const { k, d, q, r } of pfeilAuswahl(t.i, c)) {
+    const g = pfeil(); g.scale.setScalar(1.1); g.userData.grund = 1.1; g.position.set(q[0], bodenHoehe(q[0], q[1], boden - 0.03) + 0.7, q[1]); g.rotation.y = Math.atan2(r.x, r.y); g.traverse(o => { o.userData.halt = k; }); g.userData.richtung = d; t.marken.add(g);   // auf 70 cm (4.11., Tassilo: am Boden sah man sie nicht, auf 1 m zu hoch)
   }
 }
 function tourEnde() {
@@ -348,7 +357,7 @@ function zeichnen() {
 function nahebene() { const m = aktiv; if (!camera?.isPerspectiveCamera || !controls) return; const z = Math.min(20, Math.max(m.nah ?? 0.05, camera.position.distanceTo(controls.target) * 0.01));
   if (Math.abs(z - camera.near) > camera.near * 0.15) { camera.near = z; camera.updateProjectionMatrix(); } }
 function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); nahebene(); tuerenBewegen(); kachelnNeu(); zeichnen(); }
-function tuerenBewegen() { aktiv?.gruppen.tueren?.traverse(o => { const a = o.userData.angel; if (!a) return; const z = o.userData.ziel ?? 0; if (Math.abs(z - o.rotation.y) > 0.001) o.rotation.y += (z - o.rotation.y) * 0.12; }); }
+function tuerenBewegen() { for (const k of ['tueren', 'schraenke', 'fenster']) aktiv?.gruppen[k]?.traverse(o => { const S = o.userData.schub; if (S) { if (Math.abs(S.t - o.userData.ziel) > 0.002) { S.t = o.userData.t = S.t + (o.userData.ziel - S.t) * 0.1; o.position.copy(S.basis).addScaledVector(S.d, S.t); } return; } const a = o.userData.angel; if (!a) return; const z = o.userData.ziel ?? 0; if (Math.abs(z - o.rotation.y) > 0.001) o.rotation.y += (z - o.rotation.y) * 0.12; }); }
 // Estate (3.11., Tassilo: Dach bleibt, erst im Schnitt zeigen, was aufgeschnitten ist; unsere echten Fenster statt der Google-Fenster; weiter draußen
 // unschärfer wie Google): weit weg (über m.haus.nah Meter) nur die Fotostadt mit dem Google-Haus (Knoten „eigenhaus“ der Kacheln, m.haus.ganz);
 // nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
@@ -465,7 +474,8 @@ async function lade(k) {
       if (!glas && !kappenGruppe_ && !m.ohneSchnittflaechen?.includes(k)) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); }   // wie bisher (Hochhaus: rote Tragwerksflächen in der Strukturansicht)
       if (!glas && kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
     }
-    d.scene.traverse(o => { const t = /^(tuer|schrank)\|(-?\d+)(?:\|(-?\d+))?(\|zu)?/.exec(o.name); if (t) { const g = Math.PI / 180; o.userData.angel = { offen: +t[2] * g, zu: +(t[3] || 0) * g }; o.userData.ziel = t[1] === 'tuer' && !t[4] ? o.userData.angel.offen : o.userData.angel.zu; o.rotation.y = o.userData.ziel; } });   // Türen offen (Treppenhaus- und Abstelltüren zu), Schränke zu; Tipp schaltet
+    d.scene.traverse(o => { const sb = /^schiebe\|(-?[\d.]+)\|(-?[\d.]+)/.exec(o.name); if (sb) { o.userData.schub = { basis: o.position.clone(), d: new THREE.Vector3(+sb[1], 0, +sb[2]) }; o.userData.ziel = 0; o.userData.t = 0; return; }   // Schiebetür, -flügel: zu
+      const t = /^(tuer|schrank|fenster)\|(-?\d+)(?:\|(-?\d+))?(\|zu)?/.exec(o.name); if (t) { const g = Math.PI / 180; o.userData.angel = { offen: +t[2] * g, zu: +(t[3] || 0) * g }; o.userData.ziel = t[1] === 'tuer' && !t[4] ? o.userData.angel.offen : o.userData.angel.zu; o.rotation.y = o.userData.ziel; } });   // Türen offen (Treppenhaus- und Abstelltüren zu), Schränke zu; Tipp schaltet
     if (k === 'spiegel') spiegelBauen(m, netze);   // 4.11. (Tassilo): Türen immer offen   // Türflügel (tools/stadt_tueren.mjs): Drehpunkt = Angel
     g.add(d.scene); g.visible = m === aktiv ? sollSichtbar(k) : true;
     if (m.versatz?.[k]) g.position.set(...m.versatz[k]);   // z. B. Stadt: Straßenniveau unter dem Wohnungsgeschoss
@@ -629,6 +639,11 @@ window.formaZustand.blickRichtung = d => { if (!tour) return; tourBlick(camera.p
 window.formaZustand.schraenke = auf => { let n = 0; aktiv.gruppen.schraenke?.traverse(o => { const A = o.userData.angel; if (!A) return; n++; if (auf != null) o.userData.ziel = auf ? A.offen : A.zu; }); return n; };
 window.formaZustand.pfeileNeu = () => { try { tourPfeile(); return tourPfeilListe().length; } catch (e) { return String(e.stack).slice(0, 400); } };
 window.formaZustand.tourDebug = () => tour ? { i: tour.i, nb: tour.m.rundgangWege?.nachbarn?.[tour.i], kinder: tour.marken.children.length, pos: camera.position.toArray() } : null;
+window.formaZustand.alleAuf = auf => { let n = 0; for (const k of ['tueren', 'schraenke', 'fenster']) aktiv.gruppen[k]?.traverse(o => { const A = o.userData.angel, S = o.userData.schub; if (S) { o.userData.ziel = auf ? 1 : 0; n++; } else if (A) { o.userData.ziel = auf ? A.offen : A.zu; n++; } }); return n; };
+window.formaZustand.pfeilGraph = () => { if (!tour) return null; const S = tour.m.rundgang, A = S.map((st, i) => pfeilAuswahl(i, new THREE.Vector3(...st.pos)).map(e => e.k));   // Prüfregel: über sichtbare Pfeile jeden Halt erreichen
+  const weg = [];
+  for (let a = 0; a < S.length; a++) { const ges = new Set([a]), st = [a]; while (st.length) for (const b of A[st.pop()]) if (!ges.has(b)) { ges.add(b); st.push(b); } if (ges.size < S.length) weg.push([S[a].name.es, S.filter((_, i) => !ges.has(i)).map(x => x.name.es)]); }
+  return weg; };
 window.formaZustand.tourPfeile = () => tour ? tourPfeilListe().map(g => g.userData.halt) : [];
 window.formaZustand.tourGehe = j => tourGehe(j);
 window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
