@@ -107,6 +107,14 @@ function start() {
   }
   addEventListener('resize', groesse);
   for (const ev of ['pointerdown', 'wheel']) canvas.addEventListener(ev, fahrtAbbrechen, { passive: true });
+  // Safari (4.11., Tassilo: „mit zwei Fingern kann man nicht zoomen“): Mac-Trackpad und iPhone melden das Auseinanderziehen als gesturechange; ohne
+  // preventDefault zoomt die Seite statt des Modells. Mit Fingern auf dem Bild (iPhone) zoomt OrbitControls selbst, sonst (Trackpad) hier.
+  let gs = 1; const finger = new Set();
+  canvas.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') finger.add(e.pointerId); });
+  for (const ev of ['pointerup', 'pointercancel']) canvas.addEventListener(ev, e => finger.delete(e.pointerId));
+  canvas.addEventListener('gesturestart', e => { e.preventDefault(); gs = e.scale || 1; fahrtAbbrechen(); });
+  canvas.addEventListener('gesturechange', e => { e.preventDefault(); const s = e.scale || 1, f = gs / s; gs = s; if (!finger.size) zoomen(f); });
+  canvas.addEventListener('gestureend', e => e.preventDefault());
   const reiter = wrap.querySelector('.m-reiter button.on') || wrap.querySelector('.m-reiter button');
   aktiviere(reiter ? reiter.dataset.modell : Object.keys(MODELLE)[0]);
   groesse();   // Zeichenpuffer in voller Größe und Pixeldichte, sonst bleibt es bei 300 x 150 und wird unscharf
@@ -121,6 +129,12 @@ function fahren(pos, ziel, dauer = 3, danach = null) {
   fahrt = () => { const u = Math.min(1, (performance.now() - start) / (dauer * 1000)), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
     camera.position.lerpVectors(p0, p1, e); controls.target.lerpVectors(t0, t1, e); camera.lookAt(controls.target);
     if (u >= 1) { fahrt = null; controls.enabled = true; controls.update(); danach?.(); } };
+}
+function zoomen(f) {   // f < 1 näher, f > 1 weiter weg; Grenzen der Steuerung gelten
+  if (!camera || !controls || !isFinite(f) || f <= 0) return;
+  if (camera.isOrthographicCamera) { camera.zoom = Math.min(controls.maxZoom, Math.max(controls.minZoom, camera.zoom / f)); camera.updateProjectionMatrix(); return; }
+  const v = camera.position.clone().sub(controls.target), d = Math.min(controls.maxDistance, Math.max(controls.minDistance, v.length() * f));
+  camera.position.copy(controls.target).addScaledVector(v.normalize(), d);
 }
 function fahrtAbbrechen() { if (fahrt || rundgangLauf) { fahrt = null; rundgangLauf = null; if (controls) { controls.enabled = true; controls.target.copy(controls.target); } } }
 function rundgang(m) {
