@@ -266,6 +266,12 @@ function tuerenAufWeg(kurve, L) { const R = [], n = Math.max(8, Math.ceil(L / 0.
   aktiv.gruppen.tueren?.traverse(o => { if (!(o.userData.angel || o.userData.schub) || o.parent?.userData.angel || o.parent?.userData.schub) return; const b = tuerKasten(o), k = P.findIndex(q => q.x + w.x > b.min.x - 0.12 && q.x + w.x < b.max.x + 0.12 && q.z + w.z > b.min.z - 0.12 && q.z + w.z < b.max.z + 0.12);
     if (k >= 0) R.push({ o, e: k / n }); }); return R; }   // nur Türen, deren geschlossenes Blatt die Bahn kreuzt (5.11.: an Türen vorbeigehen öffnete sie)
 function tuerSetzen(o, auf) { if (o.userData.schub) { if (!o.userData.schub.t) o.userData.schub.t = 0; o.userData.ziel = auf ? 1 : 0; } else o.userData.ziel = auf ? o.userData.angel.offen : o.userData.angel.zu; }
+// Ankunftsblick (5.11., Rundgang Halt für Halt angesehen: in kleinen Räumen stand man am Ende vor Schrank, Wand oder Tür): ist der Blick in Gehrichtung
+// kürzer als 4 m, dreht der Blick auf den letzten Metern sanft bis 60° (an Flurecken unter 1 m bis 90°) zur Seite mit der weitesten Sicht, im Zimmer zum festgelegten Blick des Halts (bis 100°); nie zurück (Tassilo: „nach vorne schauen“)
+function ankunftBlick(st, ende) { const frei = d => strahl(st.pos, [st.pos[0] + d.x * 6, st.pos[1] - 0.3, st.pos[2] + d.z * 6]); const f0 = frei(ende); if (f0 >= 4) return { d: ende.clone(), frei: f0, f0 };
+  const zh = tourRichtung(st).setY(0).normalize(); if (zh.dot(ende) > Math.cos(100 * Math.PI / 180)) return { d: zh, frei: frei(zh), f0 };   // Zimmer: der festgelegte Blick des Halts, wenn er nicht hinter einem liegt
+  let best = { d: ende.clone(), frei: f0, w: f0 }; const grenze = f0 < 1 ? 90 : 60; for (let a = -grenze; a <= grenze; a += 10) { if (!a) continue; const d = ende.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a * Math.PI / 180), f = frei(d), w = Math.min(f, 6) - 0.012 * Math.abs(a); if (w > best.w) best = { d, frei: f, w }; } return { ...best, f0 }; }
+function wegEnde(kurve, L) { return kurve.getPointAt(1).sub(kurve.getPointAt(Math.max(0, 1 - 1.5 / L))).setY(0).normalize(); }
 function tourGehe(j) {
   const t = tour; if (!t || t.laeuft) return; const S = t.m.rundgang; j = (j + S.length) % S.length; if (j === t.i) return;
   const von = S[t.i], st = S[j], pfad = tourPfad(t.i, j); pfeileWeg(); t.laeuft = true; tourSchild(st);
@@ -277,14 +283,14 @@ function tourGehe(j) {
   for (let k = 0; k <= n; k++) { const q = kurve.getPointAt(k / n); H.push(bodenHoehe(q.x, q.z, H.at(-1) ?? 0)); }
   const hoehe = u => { const f = u * n, k = Math.min(n - 1, Math.floor(f)); return H[k] + (H[k + 1] - H[k]) * (f - k); };
   const blick = camera.getWorldDirection(new THREE.Vector3()), richtung = new THREE.Vector3(blick.x, 0, blick.z).normalize(), zielH = tourRichtung(st).setY(0).normalize();
-  const ende = kurve.getPointAt(1).sub(kurve.getPointAt(Math.max(0, 1 - 1.5 / L))).setY(0).normalize(), passt = ende.dot(zielH) > Math.cos(70 * Math.PI / 180) || strahl(st.pos, [st.pos[0] + ende.x * 5, st.pos[1] - 0.3, st.pos[2] + ende.z * 5]) < 2.5;   // in Gehrichtung verstellt (Schrank, Tür): doch zum Blick des Halts
+  const ende = wegEnde(kurve, L), ankunft = ankunftBlick(st, ende), passt = ende.dot(zielH) > Math.cos(70 * Math.PI / 180) || strahl(st.pos, [st.pos[0] + ende.x * 5, st.pos[1] - 0.3, st.pos[2] + ende.z * 5]) < 2.5;   // in Gehrichtung verstellt (Schrank, Tür): doch zum Blick des Halts
   controls.enabled = false; const tueren = tuerenAufWeg(kurve, L); t.tuerLog ||= [];
   fahrt = () => {
     const u = Math.min(1, (performance.now() - t0) / dauer), e = 0.5 - 0.5 * Math.cos(Math.PI * u), p = kurve.getPointAt(e);
     for (const d of tueren) { if (d.o.userData.angel) d.max = Math.max(d.max || 0, Math.abs(d.o.rotation.y - d.o.userData.angel.zu)); if (!d.auf && e > d.e - 2 / L) { d.auf = true; tuerSetzen(d.o, true); t.tuerLog.push(d); } }   // 2 m vorher auf, sie bleibt offen (5.11., Tassilo: „die Türen sollten sich hinter dir nicht schließen“)
     const vor = kurve.getPointAt(Math.min(1, e + Math.min(0.5, 0.9 / L))).sub(kurve.getPointAt(Math.max(0, e - (0.3 + 1.2 * e) / L))); vor.y = 0;   // am Ende die letzten 1,5 m, nicht der letzte Schnipsel
     if (vor.lengthSq() > 1e-6) { vor.normalize(); if (!(e > 0.8 && vor.dot(richtung) < -0.2)) richtung.copy(vor); }   // Gehrichtung wie Street View; am Ende kein Umdrehen, wenn der letzte Schnipsel zurückläuft
-    const soll = richtung.clone(), jetzt = performance.now(); soll.y = -0.14; soll.normalize(); void zielH; void passt;   // immer nach vorn (5.11., Tassilo: „wenn der Pfeil dich nach vorne bewegt, schaust du nach vorne“)
+    const k = Math.max(0, Math.min(1, (e - 0.55) / 0.4)), soll = richtung.clone().lerp(ankunft.d, k * k * (3 - 2 * k)), jetzt = performance.now(); soll.y = 0; soll.normalize(); soll.y = -0.14; soll.normalize(); void zielH; void passt;   // immer nach vorn (5.11., Tassilo: „wenn der Pfeil dich nach vorne bewegt, schaust du nach vorne“)
     blick.lerp(soll, 1 - Math.exp(-Math.min(0.1, (jetzt - (t.tz || jetzt)) / 1000) * 3)).normalize(); t.tz = jetzt;
     camera.position.set(p.x, hoehe(e) + hA + (hB - hA) * e, p.z); controls.target.copy(camera.position).addScaledVector(blick, 0.01); camera.lookAt(controls.target);
     if (u >= 1) { fahrt = null; t.laeuft = false; t.i = j; t.tz = 0; tourBlick(camera.position.toArray(), blick); tourPfeile(); }
@@ -720,6 +726,9 @@ window.formaZustand.kollisionen = async () => { const { OBB } = await import('th
     const zeig = q => [q.center.clone().sub(w).toArray().map(v => +v.toFixed(3)), q.halfSize.toArray().map(v => +v.toFixed(3))]; const r = []; for (const i of I) { const A = L[i].userData.angel, a = obb(i, A.zu + Math.sign(A.offen - A.zu) * grad * Math.PI / 180); for (const j of J) a.forEach(x => { const t = zu[j].filter(y => x.intersectsOBB(y)); if (t.length) r.push([L[i].name, +A.zu.toFixed(2), +A.offen.toFixed(2), L[i].rotation.y.toFixed(2), zeig(x), t.map(zeig)]); }); } L.forEach((o, n) => { o.rotation.y = ry0[n]; }); return r; }
   L.forEach((o, i) => { o.rotation.y = ry0[i]; }); return f; };
 window.formaZustand.teilSetzen = (x, z, t) => { let best = null, bd = 0.08; for (const k of ['tueren', 'schraenke']) aktiv.gruppen[k]?.traverse(o => { if (!o.userData.angel) return; const c = o.getWorldPosition(new THREE.Vector3()).sub(aktiv.wurzel.position), d = Math.hypot(c.x - x, c.z - z); if (d < bd) { bd = d; best = o; } }); if (best) best.userData.ziel = best.userData.angel.zu + t * (best.userData.angel.offen - best.userData.angel.zu); return best?.name; };   // für Vergleichsbilder: Flügel an der Angel (x, z) auf Anteil t öffnen
+window.formaZustand.ankunftSicht = () => { if (!tour) return null; const S = tour.m.rundgang, RW = tour.m.rundgangWege, r = [];   // Prüfregel: freie Sicht nach der Ankunft je Pfeilweg
+  S.forEach((_, i) => (RW?.pfeile?.[i] || []).forEach(k => { const p = tourPfad(i, k); if (!p) return; const P = p.map(([x, z]) => new THREE.Vector3(x, 0, z)).filter((v, n, A) => !n || v.distanceTo(A[n - 1]) > 0.04); if (P.length < 2) return; const ku = new THREE.CatmullRomCurve3(P, false, 'centripetal'), a = ankunftBlick(S[k], wegEnde(ku, ku.getLength())); r.push([S[i].name.es, S[k].name.es, +Math.min(99, a.f0).toFixed(2), +Math.min(99, a.frei).toFixed(2)]); }));
+  return r; };
 window.formaZustand.pfeilDoppelt = () => { if (!tour) return null; const S = tour.m.rundgang, f = [];   // Prüfregel: an keinem Halt zwei Pfeile unter 35° auseinander
   S.forEach((st, i) => { const P = pfeilAuswahl(i, new THREE.Vector3(...st.pos)); P.forEach((a, x) => P.slice(x + 1).forEach(b => { if (a.r.dot(b.r) > Math.cos(35 * Math.PI / 180)) f.push(S[i].name.es + ': ' + S[a.k].name.es + ' / ' + S[b.k].name.es); })); }); return f; };
 window.formaZustand.pfeilGraph = () => { if (!tour) return null; const S = tour.m.rundgang, A = S.map((st, i) => pfeilAuswahl(i, new THREE.Vector3(...st.pos)).map(e => e.k));   // Prüfregel: über sichtbare Pfeile jeden Halt erreichen
