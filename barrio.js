@@ -43,6 +43,19 @@ const SATZ = { es: { kueche: 'Cocina', silla: 'Accesible en silla de ruedas', si
     isced: ['Nursery', 'Primary', 'Secondary', 'Sixth form'], gestion: 'Run by', tel: 'Phone', cerca: 'Near', gratis: 'Free', pago: 'Paid', plazas: 'spaces', esp: 'Speciality', red: 'Network', dias: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'holidays'], foto: 'Photo: Wikimedia Commons' },
   de: { kueche: 'Küche', silla: 'Rollstuhlgerecht', sillaT: 'Teilweise rollstuhlgerecht', terraza: 'Mit Terrasse', llevar: 'Zum Mitnehmen', vege: 'Vegetarische Gerichte', publico: 'Öffentlich', privado: 'Privat', concert: 'Privat, staatlich gefördert',
     isced: ['Kita', 'Grundschule', 'Sekundarstufe', 'Oberstufe'], gestion: 'Betreiber', tel: 'Telefon', cerca: 'Nahe', gratis: 'Kostenlos', pago: 'Kostenpflichtig', plazas: 'Plätze', esp: 'Fachrichtung', red: 'Netz', dias: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So', 'Feiertage'], foto: 'Foto: Wikimedia Commons' } };
+// Ein Satz je Kategorie, wenn OSM keine eigene Beschreibung hat (5.11.: bei vielen Orten gab es nur Namen und Adresse)
+const ZWECK = {
+  metro: ['Metro: conecta con todo Madrid.', 'Metro: connects to all of Madrid.', 'Metro: Anschluss an ganz Madrid.'], bus: ['Parada de autobús de la EMT.', 'City bus stop (EMT).', 'Stadtbushaltestelle (EMT).'],
+  cercanias: ['Tren de cercanías: aeropuerto, sierra y alrededores.', 'Commuter rail: airport, mountains and surroundings.', 'S-Bahn: Flughafen, Berge und Umland.'], bici: ['Bicicletas públicas de alquiler.', 'Public bike hire.', 'Öffentlicher Fahrradverleih.'],
+  parking: ['Aparcamiento cerca de casa.', 'Car park near home.', 'Parkplatz nahe der Wohnung.'], carga: ['Punto de carga para coche eléctrico.', 'Electric car charging point.', 'Ladepunkt für Elektroautos.'],
+  super: ['La compra de cada día.', 'Everyday groceries.', 'Der tägliche Einkauf.'], mercado: ['Mercado de abastos: producto fresco y puestos de barrio.', 'Food market: fresh produce and local stalls.', 'Markthalle: frische Ware und Stände aus dem Viertel.'],
+  panaderia: ['Pan y bollería recién hechos.', 'Fresh bread and pastries.', 'Frisches Brot und Gebäck.'], farmacia: ['Farmacia: medicamentos y consejo.', 'Pharmacy: medicines and advice.', 'Apotheke: Arzneien und Beratung.'],
+  medico: ['Consulta médica.', 'Doctor’s practice.', 'Arztpraxis.'], salud: ['Hospital o clínica.', 'Hospital or clinic.', 'Krankenhaus oder Klinik.'],
+  colegio: ['Colegio o instituto.', 'School.', 'Schule.'], guarderia: ['Escuela infantil para los más pequeños.', 'Nursery for small children.', 'Kita für die Kleinsten.'], universidad: ['Universidad o centro universitario.', 'University.', 'Universität oder Hochschule.'],
+  parque: ['Parque o plaza con árboles para pasear.', 'Park or leafy square for a walk.', 'Park oder grüner Platz zum Spazieren.'], juegos: ['Parque infantil con columpios.', 'Playground.', 'Spielplatz.'], perros: ['Zona para perros sueltos.', 'Off-lead dog area.', 'Hundeauslauf.'],
+  gimnasio: ['Gimnasio o estudio de deporte.', 'Gym or fitness studio.', 'Fitnessstudio.'], piscina: ['Piscina.', 'Swimming pool.', 'Schwimmbad.'],
+  restaurante: ['Restaurante del barrio para comer o cenar.', 'Neighbourhood restaurant for lunch or dinner.', 'Restaurant im Viertel für Mittag- oder Abendessen.'], cafe: ['Café para desayunar o una pausa.', 'Café for breakfast or a break.', 'Café für Frühstück oder eine Pause.'],
+  cultura: ['Cultura: museo, teatro, cine o biblioteca.', 'Culture: museum, theatre, cinema or library.', 'Kultur: Museum, Theater, Kino oder Bibliothek.'], banco: ['Oficina bancaria o cajero.', 'Bank branch or cash machine.', 'Bankfiliale oder Geldautomat.'], correos: ['Oficina de Correos.', 'Post office.', 'Postamt.'] };
 function stunden(h, sp) { const D = SATZ[sp].dias, E = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su', 'PH']; return h.replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, x => D[E.indexOf(x)]).replace(/\boff\b/g, '–').replace(/;\s*/g, ' · '); }
 function merkmale(o, sp) {   // kurze Sätze, je Zeile einer
   const t = o.t || {}, S = SATZ[sp] || SATZ.es, L = [], j = { es: 0, en: 1, de: 2 }[sp] ?? 0, ja = v => v === 'yes' || v === 'only';
@@ -121,7 +134,7 @@ async function aufbauen() {
     const S = SATZ[sp] || SATZ.es, M = merkmale(o, sp), tel = o.t?.phone || o.t?.['contact:phone'], ort = o.dir || (o.cerca ? S.cerca + ' ' + o.cerca : '');
     info.innerHTML = `<button type="button" class="b-zu" aria-label="×">×</button>${o.img ? `<figure class="b-bild"><img src="${esc(o.img)}" alt="" loading="lazy" referrerpolicy="no-referrer"><figcaption>${S.foto}</figcaption></figure>` : ''}
       <p class="b-k" style="--f:${K.farbe}">${esc(K.n[sp] || K.n.es)}</p><h3>${esc(o.n || K.n[sp] || K.n.es)}${o.linea ? ' <span>' + esc(o.linea) + '</span>' : ''}</h3>
-      <p class="b-zeit"><b>${o.min}</b> ${TX.min} · ${o.m} ${TX.m}</p>${ort ? `<p class="b-dir">${esc(ort)}</p>` : ''}${o.t?.description ? `<p class="b-desc">${esc(o.t.description)}</p>` : ''}
+      <p class="b-zeit"><b>${o.min}</b> ${TX.min} · ${o.m} ${TX.m}</p>${ort ? `<p class="b-dir">${esc(ort)}</p>` : ''}<p class="b-desc">${esc(o.t?.description || ZWECK[o.k]?.[{ es: 0, en: 1, de: 2 }[sp] ?? 0] || '')}</p>
       ${M.length ? `<ul class="b-merk">${M.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${o.h ? `<p class="b-h">${TX.horas}: ${esc(stunden(o.h, sp))}</p>` : ''}${tel ? `<p class="b-h">${S.tel}: <a href="tel:${esc(tel.split(';')[0].replace(/\s/g, ''))}">${esc(tel.split(';')[0])}</a></p>` : ''}
       <p class="b-links"><a href="${maps}" target="_blank" rel="noopener">${TX.maps}</a>${o.web ? ` · <a href="${esc(o.web)}" target="_blank" rel="noopener">${TX.web}</a>` : ''}</p>`;
     const bild = info.querySelector('.b-bild img'); if (bild) bild.onerror = () => bild.closest('figure').remove();   // Bild weg, Karte bleibt
@@ -151,6 +164,6 @@ async function aufbauen() {
     if (wahl) { const p = 0.5 + 0.5 * Math.sin(now / 220), q = GROSS * (1.35 + 0.25 * p); m4.compose(new THREE.Vector3(wahl.x, wahl.hh, -wahl.y), new THREE.Quaternion(), new THREE.Vector3(q, q, q)); wahl.im.setMatrixAt(wahl.i, m4); wahl.im.instanceMatrix.needsUpdate = true; }
     zeichneWeg(now); renderer.render(scene, camera);
   });
-  window.formaBarrio = { orte: () => orte.length, sichtbar: () => Object.values(gruppen).filter(g => g.visible).reduce((a, g) => a + g.count, 0), waehle: (k, i = 0) => waehle(orte.find(o => o.k === k && o.i === i)), wahl: () => wahl && { n: wahl.n, min: wahl.min, weg: weg?.pts.length || 0, karte: !info.hidden, merk: info.querySelectorAll('.b-merk li').length, ort: !!info.querySelector('.b-dir'), text: info.textContent.replace(/\s+/g, ' ').trim() }, groesse: GROSS, chips: () => chips.querySelectorAll('[data-k]').length };
+  window.formaBarrio = { orte: () => orte.length, sichtbar: () => Object.values(gruppen).filter(g => g.visible).reduce((a, g) => a + g.count, 0), waehle: (k, i = 0) => waehle(orte.find(o => o.k === k && o.i === i)), wahl: () => wahl && { n: wahl.n, min: wahl.min, weg: weg?.pts.length || 0, karte: !info.hidden, merk: info.querySelectorAll('.b-merk li').length, desc: info.querySelector('.b-desc')?.textContent.length || 0, ort: !!info.querySelector('.b-dir'), text: info.textContent.replace(/\s+/g, ' ').trim() }, groesse: GROSS, chips: () => chips.querySelectorAll('[data-k]').length };
   wrap.classList.add('bereit');
 }
