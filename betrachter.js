@@ -258,11 +258,12 @@ function tourBlick(pos, dir) {   // Umsehen am Standpunkt: Drehpunkt 1 cm vor de
 }
 // Türen auf dem Laufweg (5.11., Tassilo: „wenn man durch eine Tür geht, sollte die Tür sich öffnen und dann wieder schließen“): Mitte des
 // geschlossenen Blatts näher als 0,5 m an der Bahn; e = Bahnanteil an der Tür
-function tuerMitte(o) { if (o.userData.mitteZu) return o.userData.mitteZu; const r = o.rotation.y, p = o.position.clone(); if (o.userData.angel) o.rotation.y = o.userData.angel.zu; if (o.userData.schub) o.position.copy(o.userData.schub.basis);
-  o.updateMatrixWorld(true); const b = new THREE.Box3(); o.traverse(c => { if (c.isMesh && !c.userData.tuerPunkt) b.expandByObject(c); }); o.rotation.y = r; o.position.copy(p); o.updateMatrixWorld(true); return (o.userData.mitteZu = b.getCenter(new THREE.Vector3())); }
+function tuerMitte(o) { return tuerKasten(o).getCenter(new THREE.Vector3()); }
+function tuerKasten(o) { if (o.userData.kastenZu) return o.userData.kastenZu; const r = o.rotation.y, p = o.position.clone(); if (o.userData.angel) o.rotation.y = o.userData.angel.zu; if (o.userData.schub) o.position.copy(o.userData.schub.basis);
+  o.updateMatrixWorld(true); const b = new THREE.Box3(); o.traverse(c => { if (c.isMesh && !c.userData.tuerPunkt) b.expandByObject(c); }); o.rotation.y = r; o.position.copy(p); o.updateMatrixWorld(true); return (o.userData.kastenZu = b); }
 function tuerenAufWeg(kurve, L) { const R = [], n = Math.max(8, Math.ceil(L / 0.1)), P = []; for (let k = 0; k <= n; k++) P.push(kurve.getPointAt(k / n)); const w = aktiv.wurzel.position;
-  aktiv.gruppen.tueren?.traverse(o => { if (!(o.userData.angel || o.userData.schub) || o.parent?.userData.angel || o.parent?.userData.schub) return; const c = tuerMitte(o).clone().sub(w); let best = 1e9, bk = 0;
-    P.forEach((q, k) => { const d = Math.hypot(q.x - c.x, q.z - c.z); if (d < best) { best = d; bk = k; } }); if (best < 0.5) R.push({ o, e: bk / n }); }); return R; }
+  aktiv.gruppen.tueren?.traverse(o => { if (!(o.userData.angel || o.userData.schub) || o.parent?.userData.angel || o.parent?.userData.schub) return; const b = tuerKasten(o), k = P.findIndex(q => q.x + w.x > b.min.x - 0.12 && q.x + w.x < b.max.x + 0.12 && q.z + w.z > b.min.z - 0.12 && q.z + w.z < b.max.z + 0.12);
+    if (k >= 0) R.push({ o, e: k / n }); }); return R; }   // nur Türen, deren geschlossenes Blatt die Bahn kreuzt (5.11.: an Türen vorbeigehen öffnete sie)
 function tuerSetzen(o, auf) { if (o.userData.schub) { if (!o.userData.schub.t) o.userData.schub.t = 0; o.userData.ziel = auf ? 1 : 0; } else o.userData.ziel = auf ? o.userData.angel.offen : o.userData.angel.zu; }
 function tourGehe(j) {
   const t = tour; if (!t || t.laeuft) return; const S = t.m.rundgang; j = (j + S.length) % S.length; if (j === t.i) return;
@@ -279,7 +280,7 @@ function tourGehe(j) {
   controls.enabled = false; const tueren = tuerenAufWeg(kurve, L); t.tuerLog ||= [];
   fahrt = () => {
     const u = Math.min(1, (performance.now() - t0) / dauer), e = 0.5 - 0.5 * Math.cos(Math.PI * u), p = kurve.getPointAt(e);
-    for (const d of tueren) { if (!d.auf && e > d.e - 1.6 / L) { d.auf = true; tuerSetzen(d.o, true); t.tuerLog.push(d.o.name); } if (d.auf && !d.zu && (e > d.e + 1.1 / L || (u >= 1 && d.e < 1 - 0.35 / L))) { d.zu = true; tuerSetzen(d.o, false); } }   // 1,6 m vorher auf, 1,1 m danach zu
+    for (const d of tueren) { if (!d.auf && e > d.e - 1.6 / L) { d.auf = true; tuerSetzen(d.o, true); t.tuerLog.push(d.o.name); } if (d.auf && !d.zu && (e > d.e + 1.1 / L || (u >= 1 && d.e < 1 - 0.15 / L))) { d.zu = true; tuerSetzen(d.o, false); } }   // 1,6 m vorher auf, 1,1 m danach zu
     const vor = kurve.getPointAt(Math.min(1, e + Math.min(0.5, 0.9 / L))).sub(kurve.getPointAt(Math.max(0, e - (0.3 + 1.2 * e) / L))); vor.y = 0;   // am Ende die letzten 1,5 m, nicht der letzte Schnipsel
     if (vor.lengthSq() > 1e-6) richtung.copy(vor.normalize());   // Gehrichtung behalten wie Street View, Blick leicht nach unten (dort liegen die Pfeile)
     const w = Math.max(0, (e - 0.55) / 0.45) * (passt ? 1 : 0), soll = richtung.clone().multiplyScalar(1 - w).addScaledVector(zielH, w).normalize(); soll.y = -0.14; soll.normalize();   // zum Blick des Halts nur, wenn er ungefähr in Gehrichtung liegt
