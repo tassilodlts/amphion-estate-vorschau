@@ -269,7 +269,7 @@ function tuerSetzen(o, auf) { if (o.userData.schub) { if (!o.userData.schub.t) o
 // Ankunftsblick (5.11., Rundgang Halt für Halt angesehen: in kleinen Räumen stand man am Ende vor Schrank, Wand oder Tür): ist der Blick in Gehrichtung
 // kürzer als 4 m, dreht der Blick auf den letzten Metern sanft bis 60° (an Flurecken unter 1 m bis 90°) zur Seite mit der weitesten Sicht, im Zimmer zum festgelegten Blick des Halts (bis 100°); nie zurück (Tassilo: „nach vorne schauen“)
 function ankunftBlick(st, ende) { const frei = d => strahl(st.pos, [st.pos[0] + d.x * 6, st.pos[1] - 0.3, st.pos[2] + d.z * 6]); const f0 = frei(ende); if (f0 >= 4) return { d: ende.clone(), frei: f0, f0 };
-  const zh = tourRichtung(st).setY(0).normalize(); if (zh.dot(ende) > Math.cos(100 * Math.PI / 180)) return { d: zh, frei: frei(zh), f0 };   // Zimmer: der festgelegte Blick des Halts, wenn er nicht hinter einem liegt
+  const zh = tourRichtung(st).setY(0).normalize(); const fz = frei(zh); if (zh.dot(ende) > Math.cos(100 * Math.PI / 180) && fz >= 2) return { d: zh, frei: fz, f0 };   // Zimmer: der festgelegte Blick des Halts, wenn er nicht hinter einem liegt und frei ist
   let best = { d: ende.clone(), frei: f0, w: f0 }; const grenze = f0 < 1 ? 90 : 60; for (let a = -grenze; a <= grenze; a += 10) { if (!a) continue; const d = ende.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a * Math.PI / 180), f = frei(d), w = Math.min(f, 6) - 0.012 * Math.abs(a); if (w > best.w) best = { d, frei: f, w }; } return { ...best, f0 }; }
 function wegEnde(kurve, L) { return kurve.getPointAt(1).sub(kurve.getPointAt(Math.max(0, 1 - 1.5 / L))).setY(0).normalize(); }
 function tourGehe(j) {
