@@ -211,6 +211,14 @@ main>section{padding:72px var(--rand);max-width:var(--breit);margin:0 auto}
 .barrio .b-info p{margin:3px 0}
 .barrio .b-info .b-h{color:var(--grau);font-size:13px}
 .barrio .b-info .b-links a{color:var(--akzent)}
+.barrio .b-info{max-height:calc(100% - 24px);overflow:auto}
+.barrio .b-info .b-bild{margin:-14px -16px 10px;position:relative}
+.barrio .b-info .b-bild img{display:block;width:100%;height:150px;object-fit:cover}
+.barrio .b-info .b-bild figcaption{position:absolute;right:6px;bottom:4px;font-size:10px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.7)}
+.barrio .b-info .b-dir{font-weight:500}
+.barrio .b-info .b-desc{color:#333;line-height:1.4;margin:6px 0}
+.barrio .b-info .b-merk{list-style:none;padding:0;margin:6px 0;display:flex;flex-wrap:wrap;gap:4px 6px}
+.barrio .b-info .b-merk li{font-size:12px;background:#f2f0ec;padding:2px 8px;border-radius:10px}
 .barrio .b-zu{position:absolute;right:8px;top:6px;border:0;background:none;font-size:22px;cursor:pointer;color:var(--grau)}
 .barrio .b-tip{position:absolute;pointer-events:none;background:rgba(17,17,17,.86);color:#fff;font-size:13px;padding:4px 8px;white-space:nowrap}
 .barrio .b-kat{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px 18px;margin-top:16px}

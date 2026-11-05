@@ -22,11 +22,42 @@ const FAM = [
   ['ocio', { es: 'Comer y cultura', en: 'Food and culture', de: 'Essen und Kultur' }, [['restaurante', '#c2347a', 'Restaurante', 'Restaurant', 'Restaurant'], ['cafe', '#e07bb0', 'Café', 'Café', 'Café'], ['cultura', '#8e2a6b', 'Cultura', 'Culture', 'Kultur']]],
   ['servicios', { es: 'Servicios', en: 'Services', de: 'Dienste' }, [['banco', '#8a7a62', 'Banco', 'Bank', 'Bank'], ['correos', '#b3a07c', 'Correos', 'Post office', 'Post']]]];
 const KAT = {}; for (const [fam, , L] of FAM) for (const [k, farbe, es, en, de] of L) KAT[k] = { fam, farbe, n: { es, en, de } };
+const GROSS = 7;   // Kugelhalbmesser in Metern (5.11., Tassilo: „die Punkte größer“; Weltgröße, beim Herauszoomen also kleiner)
 const ANFANG = new Set(['metro', 'bus', 'super', 'mercado', 'panaderia', 'farmacia', 'colegio', 'parque', 'juegos', 'gimnasio']);   // beim Öffnen sichtbar, der Rest per Tipp
 const T = { es: { min: 'min a pie', m: 'm', casa: 'Tu casa', maps: 'Ver en Google Maps', web: 'Web', horas: 'Horario', cerca: 'Lo más cercano', alle: 'Todo', keine: 'Nada' },
   en: { min: 'min on foot', m: 'm', casa: 'Your home', maps: 'Open in Google Maps', web: 'Website', horas: 'Hours', cerca: 'Nearest', alle: 'All', keine: 'None' },
   de: { min: 'Min. zu Fuß', m: 'm', casa: 'Ihr Zuhause', maps: 'In Google Maps öffnen', web: 'Webseite', horas: 'Öffnungszeiten', cerca: 'Am nächsten', alle: 'Alle', keine: 'Keine' } };
 
+// Beschreibung (5.11., Tassilo: „Name, Betreff, Beschreibung, alles erscheinen, damit man versteht, was da ist“): aus den OSM-Angaben je Ort (o.t)
+const KUECHE = { spanish: ['española', 'Spanish', 'spanisch'], regional: ['regional', 'regional', 'regional'], tapas: ['tapas', 'tapas', 'Tapas'], italian: ['italiana', 'Italian', 'italienisch'], pizza: ['pizza', 'pizza', 'Pizza'],
+  japanese: ['japonesa', 'Japanese', 'japanisch'], sushi: ['sushi', 'sushi', 'Sushi'], chinese: ['china', 'Chinese', 'chinesisch'], asian: ['asiática', 'Asian', 'asiatisch'], thai: ['tailandesa', 'Thai', 'thailändisch'],
+  korean: ['coreana', 'Korean', 'koreanisch'], vietnamese: ['vietnamita', 'Vietnamese', 'vietnamesisch'], indian: ['india', 'Indian', 'indisch'], mexican: ['mexicana', 'Mexican', 'mexikanisch'], peruvian: ['peruana', 'Peruvian', 'peruanisch'],
+  argentinian: ['argentina', 'Argentinian', 'argentinisch'], venezuelan: ['venezolana', 'Venezuelan', 'venezolanisch'], american: ['americana', 'American', 'amerikanisch'], burger: ['hamburguesas', 'burgers', 'Burger'],
+  mediterranean: ['mediterránea', 'Mediterranean', 'mediterran'], french: ['francesa', 'French', 'französisch'], greek: ['griega', 'Greek', 'griechisch'], lebanese: ['libanesa', 'Lebanese', 'libanesisch'], turkish: ['turca', 'Turkish', 'türkisch'],
+  kebab: ['kebab', 'kebab', 'Kebab'], seafood: ['marisco', 'seafood', 'Meeresfrüchte'], steak_house: ['carnes', 'steak house', 'Steakhaus'], international: ['internacional', 'international', 'international'], fusion: ['fusión', 'fusion', 'Fusion'],
+  vegetarian: ['vegetariana', 'vegetarian', 'vegetarisch'], vegan: ['vegana', 'vegan', 'vegan'], coffee_shop: ['café', 'coffee', 'Kaffee'], sandwich: ['bocadillos', 'sandwiches', 'Sandwiches'], breakfast: ['desayunos', 'breakfast', 'Frühstück'],
+  cake: ['tartas', 'cakes', 'Kuchen'], ice_cream: ['helados', 'ice cream', 'Eis'], healthy: ['saludable', 'healthy', 'gesund'], juice: ['zumos', 'juices', 'Säfte'], tea: ['té', 'tea', 'Tee'], chicken: ['pollo', 'chicken', 'Hähnchen'] };
+const SATZ = { es: { kueche: 'Cocina', silla: 'Accesible en silla de ruedas', sillaT: 'Acceso parcial en silla de ruedas', terraza: 'Con terraza', llevar: 'Para llevar', vege: 'Opciones vegetarianas', publico: 'Público', privado: 'Privado',
+    concert: 'Concertado', isced: ['Escuela infantil', 'Primaria', 'ESO', 'Bachillerato'], gestion: 'Gestiona', tel: 'Teléfono', cerca: 'Cerca de', gratis: 'Gratis', pago: 'De pago', plazas: 'plazas', esp: 'Especialidad', red: 'Red', dias: ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do', 'festivos'], foto: 'Foto: Wikimedia Commons' },
+  en: { kueche: 'Cuisine', silla: 'Wheelchair accessible', sillaT: 'Partly wheelchair accessible', terraza: 'Outdoor seating', llevar: 'Takeaway', vege: 'Vegetarian options', publico: 'Public', privado: 'Private', concert: 'State-funded private',
+    isced: ['Nursery', 'Primary', 'Secondary', 'Sixth form'], gestion: 'Run by', tel: 'Phone', cerca: 'Near', gratis: 'Free', pago: 'Paid', plazas: 'spaces', esp: 'Speciality', red: 'Network', dias: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'holidays'], foto: 'Photo: Wikimedia Commons' },
+  de: { kueche: 'Küche', silla: 'Rollstuhlgerecht', sillaT: 'Teilweise rollstuhlgerecht', terraza: 'Mit Terrasse', llevar: 'Zum Mitnehmen', vege: 'Vegetarische Gerichte', publico: 'Öffentlich', privado: 'Privat', concert: 'Privat, staatlich gefördert',
+    isced: ['Kita', 'Grundschule', 'Sekundarstufe', 'Oberstufe'], gestion: 'Betreiber', tel: 'Telefon', cerca: 'Nahe', gratis: 'Kostenlos', pago: 'Kostenpflichtig', plazas: 'Plätze', esp: 'Fachrichtung', red: 'Netz', dias: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So', 'Feiertage'], foto: 'Foto: Wikimedia Commons' } };
+function stunden(h, sp) { const D = SATZ[sp].dias, E = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su', 'PH']; return h.replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, x => D[E.indexOf(x)]).replace(/\boff\b/g, '–').replace(/;\s*/g, ' · '); }
+function merkmale(o, sp) {   // kurze Sätze, je Zeile einer
+  const t = o.t || {}, S = SATZ[sp] || SATZ.es, L = [], j = { es: 0, en: 1, de: 2 }[sp] ?? 0, ja = v => v === 'yes' || v === 'only';
+  if (t.cuisine) L.push(S.kueche + ': ' + t.cuisine.split(/[;,]/).map(c => KUECHE[c.trim()]?.[j] || c.trim().replace(/_/g, ' ')).join(', '));
+  if (t['isced:level']) L.push(t['isced:level'].split(/[;,-]/).map(n => S.isced[+n] || '').filter(Boolean).join(', '));
+  if (t['operator:type']) L.push({ public: S.publico, government: S.publico, private: S.privado, private_non_profit: S.privado, religious: S.concert, community: S.publico }[t['operator:type']] || '');
+  if (t['healthcare:speciality']) L.push(S.esp + ': ' + t['healthcare:speciality'].replace(/[;_]/g, ' '));
+  if (t.network && o.k !== 'metro') L.push(S.red + ': ' + t.network);
+  if (t.capacity && /^\d+$/.test(t.capacity)) L.push(t.capacity + ' ' + S.plazas);
+  if (t.fee) L.push(t.fee === 'no' ? S.gratis : S.pago);
+  if (ja(t.outdoor_seating)) L.push(S.terraza); if (ja(t.takeaway)) L.push(S.llevar); if (ja(t['diet:vegetarian'])) L.push(S.vege);
+  if (t.wheelchair === 'yes') L.push(S.silla); else if (t.wheelchair === 'limited') L.push(S.sillaT);
+  const op = t.operator || t.brand; if (op && op !== o.n) L.push(S.gestion + ': ' + op);
+  return L.filter(Boolean);
+}
 function start() {
   let los = false; const io = new IntersectionObserver(e => { if (!los && e[0].isIntersecting) { los = true; io.disconnect(); aufbauen(); } }, { rootMargin: '400px' }); io.observe(wrap);
 }
@@ -61,7 +92,7 @@ async function aufbauen() {
   const orte = [], gruppen = {}, kugel = new THREE.SphereGeometry(1, 18, 12), stiele = [];
   for (const [k, L] of Object.entries(D.orte)) {
     if (!KAT[k]) continue; const im = new THREE.InstancedMesh(kugel, new THREE.MeshLambertMaterial({ color: KAT[k].farbe }), L.length), m4 = new THREE.Matrix4();
-    L.forEach((o, i) => { const h = Y + 10 + (i % 3) * 1.5; m4.compose(new THREE.Vector3(o.x, h, -o.y), new THREE.Quaternion(), new THREE.Vector3(4.2, 4.2, 4.2)); im.setMatrixAt(i, m4); orte.push({ ...o, k, i, im, hh: h }); stiele.push(o.x, Y, -o.y, o.x, h, -o.y); });   // hh: Höhe der Kugel (h ist die Öffnungszeit)
+    L.forEach((o, i) => { const h = Y + 14 + (i % 3) * 2; m4.compose(new THREE.Vector3(o.x, h, -o.y), new THREE.Quaternion(), new THREE.Vector3(GROSS, GROSS, GROSS)); im.setMatrixAt(i, m4); orte.push({ ...o, k, i, im, hh: h }); stiele.push(o.x, Y, -o.y, o.x, h, -o.y); });   // hh: Höhe der Kugel (h ist die Öffnungszeit)
     im.userData.k = k; im.visible = ANFANG.has(k); gruppen[k] = im; scene.add(im);
   }
   const stielGeo = new THREE.BufferGeometry(); stielGeo.setAttribute('position', new THREE.Float32BufferAttribute(stiele, 3)); const stielLinien = new THREE.LineSegments(stielGeo, new THREE.LineBasicMaterial({ color: 0x8c8780, transparent: true, opacity: 0.55 })); scene.add(stielLinien);
@@ -84,12 +115,16 @@ async function aufbauen() {
   // Auswahl: Karte mit Name, Kategorie, Gehzeit, Adresse, Öffnungszeiten, Links; Kamera fährt so, dass Weg und Ort im Bild sind
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   function waehle(o) {
-    if (wahl) { const m = new THREE.Matrix4().compose(new THREE.Vector3(wahl.x, wahl.hh, -wahl.y), new THREE.Quaternion(), new THREE.Vector3(4.2, 4.2, 4.2)); wahl.im.setMatrixAt(wahl.i, m); wahl.im.instanceMatrix.needsUpdate = true; }   // alte Wahl wieder klein
+    if (wahl) { const m = new THREE.Matrix4().compose(new THREE.Vector3(wahl.x, wahl.hh, -wahl.y), new THREE.Quaternion(), new THREE.Vector3(GROSS, GROSS, GROSS)); wahl.im.setMatrixAt(wahl.i, m); wahl.im.instanceMatrix.needsUpdate = true; }   // alte Wahl wieder klein
     wahl = o; wegZeigen(o); if (!o) { info.hidden = true; return; }
     const K = KAT[o.k], maps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.n ? `${o.n}, ${o.dir ? o.dir + ', ' : ''}Madrid` : `${o.la},${o.lo}`);
-    info.innerHTML = `<button type="button" class="b-zu" aria-label="×">×</button><p class="b-k" style="--f:${K.farbe}">${esc(K.n[sp] || K.n.es)}</p><h3>${esc(o.n || K.n[sp] || K.n.es)}${o.linea ? ' <span>' + esc(o.linea) + '</span>' : ''}</h3>
-      <p class="b-zeit"><b>${o.min}</b> ${TX.min} · ${o.m} ${TX.m}</p>${o.dir ? `<p>${esc(o.dir)}</p>` : ''}${o.h ? `<p class="b-h">${TX.horas}: ${esc(o.h)}</p>` : ''}
+    const S = SATZ[sp] || SATZ.es, M = merkmale(o, sp), tel = o.t?.phone || o.t?.['contact:phone'], ort = o.dir || (o.cerca ? S.cerca + ' ' + o.cerca : '');
+    info.innerHTML = `<button type="button" class="b-zu" aria-label="×">×</button>${o.img ? `<figure class="b-bild"><img src="${esc(o.img)}" alt="" loading="lazy" referrerpolicy="no-referrer"><figcaption>${S.foto}</figcaption></figure>` : ''}
+      <p class="b-k" style="--f:${K.farbe}">${esc(K.n[sp] || K.n.es)}</p><h3>${esc(o.n || K.n[sp] || K.n.es)}${o.linea ? ' <span>' + esc(o.linea) + '</span>' : ''}</h3>
+      <p class="b-zeit"><b>${o.min}</b> ${TX.min} · ${o.m} ${TX.m}</p>${ort ? `<p class="b-dir">${esc(ort)}</p>` : ''}${o.t?.description ? `<p class="b-desc">${esc(o.t.description)}</p>` : ''}
+      ${M.length ? `<ul class="b-merk">${M.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}${o.h ? `<p class="b-h">${TX.horas}: ${esc(stunden(o.h, sp))}</p>` : ''}${tel ? `<p class="b-h">${S.tel}: <a href="tel:${esc(tel.split(';')[0].replace(/\s/g, ''))}">${esc(tel.split(';')[0])}</a></p>` : ''}
       <p class="b-links"><a href="${maps}" target="_blank" rel="noopener">${TX.maps}</a>${o.web ? ` · <a href="${esc(o.web)}" target="_blank" rel="noopener">${TX.web}</a>` : ''}</p>`;
+    const bild = info.querySelector('.b-bild img'); if (bild) bild.onerror = () => bild.closest('figure').remove();   // Bild weg, Karte bleibt
     info.hidden = false; info.querySelector('.b-zu').onclick = () => waehle(null);
     const b = new THREE.Box3(); for (const [x, y] of o.weg || [[o.x, o.y]]) b.expandByPoint(new THREE.Vector3(x, Y, -y)); b.expandByPoint(tuer);
     const c = b.getCenter(new THREE.Vector3()), r = Math.max(120, b.getSize(new THREE.Vector3()).length() * 0.9), dir = camera.position.clone().sub(controls.target).normalize();
@@ -113,9 +148,9 @@ async function aufbauen() {
   renderer.setAnimationLoop(now => {
     if (flug) { const u = Math.min(1, (now - flug.s) / 1400), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2; camera.position.lerpVectors(flug.p0, flug.p1, e); controls.target.lerpVectors(flug.t0, flug.t1, e); if (u >= 1) flug = null; }
     controls.update(); const s = 1 + 0.18 * Math.sin(now / 380); tuerRing.scale.set(s, s, s);
-    if (wahl) { const p = 0.5 + 0.5 * Math.sin(now / 220), q = 4.2 * (1.35 + 0.25 * p); m4.compose(new THREE.Vector3(wahl.x, wahl.hh, -wahl.y), new THREE.Quaternion(), new THREE.Vector3(q, q, q)); wahl.im.setMatrixAt(wahl.i, m4); wahl.im.instanceMatrix.needsUpdate = true; }
+    if (wahl) { const p = 0.5 + 0.5 * Math.sin(now / 220), q = GROSS * (1.35 + 0.25 * p); m4.compose(new THREE.Vector3(wahl.x, wahl.hh, -wahl.y), new THREE.Quaternion(), new THREE.Vector3(q, q, q)); wahl.im.setMatrixAt(wahl.i, m4); wahl.im.instanceMatrix.needsUpdate = true; }
     zeichneWeg(now); renderer.render(scene, camera);
   });
-  window.formaBarrio = { orte: () => orte.length, sichtbar: () => Object.values(gruppen).filter(g => g.visible).reduce((a, g) => a + g.count, 0), waehle: (k, i = 0) => waehle(orte.find(o => o.k === k && o.i === i)), wahl: () => wahl && { n: wahl.n, min: wahl.min, weg: weg?.pts.length || 0, karte: !info.hidden }, chips: () => chips.querySelectorAll('[data-k]').length };
+  window.formaBarrio = { orte: () => orte.length, sichtbar: () => Object.values(gruppen).filter(g => g.visible).reduce((a, g) => a + g.count, 0), waehle: (k, i = 0) => waehle(orte.find(o => o.k === k && o.i === i)), wahl: () => wahl && { n: wahl.n, min: wahl.min, weg: weg?.pts.length || 0, karte: !info.hidden, merk: info.querySelectorAll('.b-merk li').length, ort: !!info.querySelector('.b-dir'), text: info.textContent.replace(/\s+/g, ' ').trim() }, groesse: GROSS, chips: () => chips.querySelectorAll('[data-k]').length };
   wrap.classList.add('bereit');
 }
