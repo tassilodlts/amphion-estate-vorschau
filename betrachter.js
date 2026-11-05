@@ -703,6 +703,7 @@ window.formaZustand.pfeilGraph = () => { if (!tour) return null; const S = tour.
 window.formaZustand.tourPfeile = () => tour ? tourPfeilListe().map(g => g.userData.halt) : [];
 window.formaZustand.tourGehe = j => tourGehe(j);
 window.formaZustand.tourTueren = () => tour?.tuerLog || [];
+window.formaZustand.tuerenAuf = () => { let n = 0; aktiv.gruppen.tueren?.traverse(o => { const A = o.userData.angel; if (A && Math.abs(o.rotation.y - A.zu) > 0.8) n++; }); return n; };   // Prüfregel: Türen mehr als 45° offen
 window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
 // El barrio (4.11., Tassilo: „Madrid abstrahiert, Häuser als Blöcke aus dem Kataster, Supermärkte, Parks, Spielplätze, Metro, Bus, Züge, Flughafen,
 // und wie lange man zu Fuß braucht“): Kataster-Blöcke (barrio.glb), Gehzonen 5/10/15 min, Orte mit Symbol und Minuten, Liste mit Sätzen; Tipp auf eine
