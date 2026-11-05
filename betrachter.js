@@ -280,7 +280,7 @@ function tourGehe(j) {
   controls.enabled = false; const tueren = tuerenAufWeg(kurve, L); t.tuerLog ||= [];
   fahrt = () => {
     const u = Math.min(1, (performance.now() - t0) / dauer), e = 0.5 - 0.5 * Math.cos(Math.PI * u), p = kurve.getPointAt(e);
-    for (const d of tueren) { if (!d.auf && e > d.e - 1.6 / L) { d.auf = true; tuerSetzen(d.o, true); t.tuerLog.push(d.o.name); } if (d.auf && !d.zu && (e > d.e + 1.1 / L || (u >= 1 && d.e < 1 - 0.15 / L))) { d.zu = true; tuerSetzen(d.o, false); } }   // 1,6 m vorher auf, 1,1 m danach zu
+    for (const d of tueren) { if (d.o.userData.angel) d.max = Math.max(d.max || 0, Math.abs(d.o.rotation.y - d.o.userData.angel.zu)); if (!d.auf && e > d.e - 2 / L) { d.auf = true; tuerSetzen(d.o, true); t.tuerLog.push(d); } if (d.auf && !d.zu && (e > d.e + 1.1 / L || (u >= 1 && d.e < 1 - 0.15 / L))) { d.zu = true; tuerSetzen(d.o, false); } }   // 1,6 m vorher auf, 1,1 m danach zu
     const vor = kurve.getPointAt(Math.min(1, e + Math.min(0.5, 0.9 / L))).sub(kurve.getPointAt(Math.max(0, e - (0.3 + 1.2 * e) / L))); vor.y = 0;   // am Ende die letzten 1,5 m, nicht der letzte Schnipsel
     if (vor.lengthSq() > 1e-6) richtung.copy(vor.normalize());   // Gehrichtung behalten wie Street View, Blick leicht nach unten (dort liegen die Pfeile)
     const w = Math.max(0, (e - 0.55) / 0.45) * (passt ? 1 : 0), soll = richtung.clone().multiplyScalar(1 - w).addScaledVector(zielH, w).normalize(); soll.y = -0.14; soll.normalize();   // zum Blick des Halts nur, wenn er ungefähr in Gehrichtung liegt
@@ -395,7 +395,9 @@ function faltLage(o) {   // Laden k bei Faltwinkel θ = t·90° (t = 1 wie in Rh
   const f = o.userData.falt, th = f.t * Math.PI / 2, k = f.k, n = new THREE.Vector3(f.a.z, 0, -f.a.x).multiplyScalar(f.sg), phi = t => (k % 2 ? -f.sg : f.sg) * t;
   o.position.copy(f.basis).addScaledVector(f.a, k * f.w * Math.cos(th)).addScaledVector(n, k % 2 ? f.w * (Math.sin(th) - 1) : 0); o.rotation.y = phi(th) - phi(Math.PI / 2); o.position.addScaledVector(f.c, 1 - f.t);   // c: Versatz zur genauen Rhino-Lage im Zustand zu
 }
-function tuerenBewegen() { for (const k of ['tueren', 'schraenke', 'fenster']) aktiv?.gruppen[k]?.traverse(o => { const Fa = o.userData.falt; if (Fa) { if (Math.abs(Fa.t - o.userData.ziel) > 0.002) { Fa.t += (o.userData.ziel - Fa.t) * 0.08; faltLage(o); } return; } const S = o.userData.schub; if (S) { if (Math.abs(S.t - o.userData.ziel) > 0.002) { S.t = o.userData.t = S.t + (o.userData.ziel - S.t) * 0.1; o.position.copy(S.basis).addScaledVector(S.d, S.t); } return; } const a = o.userData.angel; if (!a) return; const z = o.userData.ziel ?? 0, r = a.achse || 'y'; if (Math.abs(z - o.rotation[r]) > 0.001) o.rotation[r] += (z - o.rotation[r]) * 0.12; }); }
+let TUER_T = 0;
+function tuerenBewegen() { const jetzt = performance.now(), f = 1 - Math.exp(-Math.min(0.2, (jetzt - (TUER_T || jetzt)) / 1000) * 7.5); TUER_T = jetzt;   // zeitbasiert (5.11.: bei wenigen Bildern je Sekunde gingen Türen im Rundgang kaum auf)
+  for (const k of ['tueren', 'schraenke', 'fenster']) aktiv?.gruppen[k]?.traverse(o => { const Fa = o.userData.falt; if (Fa) { if (Math.abs(Fa.t - o.userData.ziel) > 0.002) { Fa.t += (o.userData.ziel - Fa.t) * f * 0.7; faltLage(o); } return; } const S = o.userData.schub; if (S) { if (Math.abs(S.t - o.userData.ziel) > 0.002) { S.t = o.userData.t = S.t + (o.userData.ziel - S.t) * f * 0.85; o.position.copy(S.basis).addScaledVector(S.d, S.t); } return; } const a = o.userData.angel; if (!a) return; const z = o.userData.ziel ?? 0, r = a.achse || 'y'; if (Math.abs(z - o.rotation[r]) > 0.001) o.rotation[r] += (z - o.rotation[r]) * f; }); }
 // Estate (3.11., Tassilo: Dach bleibt, erst im Schnitt zeigen, was aufgeschnitten ist; unsere echten Fenster statt der Google-Fenster; weiter draußen
 // unschärfer wie Google): weit weg (über m.haus.nah Meter) nur die Fotostadt mit dem Google-Haus (Knoten „eigenhaus“ der Kacheln, m.haus.ganz);
 // nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
@@ -434,7 +436,7 @@ function aktiviere(name) {
   if (m.anflug && !m.angeflogen) {   // Anflug (Estate): erst der Blick aus der Stadt, nach dem Laden die Fahrt zum Startblick
     m.angeflogen = true; kamera(m.anflug.pos, m.anflug.ziel); 
     // 5.11. (Tassilo: „die Karte erst reinzoomen, wenn der Benutzer an dieser Stelle angelangt“): sobald die Bühne zu einem Drittel im Bild ist
-    const imBild = () => { const r = canvas.getBoundingClientRect(), s = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0); return !document.hidden && s >= 0.35 * Math.min(r.height, innerHeight); };
+    const imBild = () => { const r = canvas.getBoundingClientRect(), s = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0); return s >= 0.35 * Math.min(r.height, innerHeight); };
     const warte = f => { if (aktiv !== m) return; if (!imBild()) { setTimeout(() => warte(f), 250); return; } f(); };   // 5.11. (Tassilo: „diese Pause darf es nicht geben, sonst scrollen die Leute weiter“): sofort los
     m.anflugImBild = imBild; warte(() => { if (aktiv === m && !fahrt) { const b = m.blicke[m.start]; fahren(b.pos, b.ziel, m.anflug.dauer || 6, () => { const frei = () => aktiv === m && !tour && !fahrt && !m.angetippt;
       // 4.11. (Tassilo): stehen bleiben mit Dach, dann Dach in einem Schritt weg, dann ohne Abblenden hinein in den Rundgang
@@ -703,7 +705,7 @@ window.formaZustand.pfeilGraph = () => { if (!tour) return null; const S = tour.
   return weg; };
 window.formaZustand.tourPfeile = () => tour ? tourPfeilListe().map(g => g.userData.halt) : [];
 window.formaZustand.tourGehe = j => tourGehe(j);
-window.formaZustand.tourTueren = () => tour?.tuerLog || [];
+window.formaZustand.tourTueren = () => (tour?.tuerLog || []).map(d => [d.o.name, +(d.max || 0).toFixed(2)]);
 window.formaZustand.tuerenAuf = () => { let n = 0; aktiv.gruppen.tueren?.traverse(o => { const A = o.userData.angel; if (A && Math.abs(o.rotation.y - A.zu) > 0.8) n++; }); return n; };   // Prüfregel: Türen mehr als 45° offen
 window.formaZustand.faehrt = () => !!(fahrt || rundgangLauf);   // Prüfregel: Anflug und Rundgang laufen   // für Prüfungen und Vergleichsbilder: Kamera exakt setzen
 // El barrio (4.11., Tassilo: „Madrid abstrahiert, Häuser als Blöcke aus dem Kataster, Supermärkte, Parks, Spielplätze, Metro, Bus, Züge, Flughafen,
