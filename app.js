@@ -3,6 +3,8 @@
 const TEXTE = {
   es: null,   // Spanisch steht im HTML
   en: {
+    'gal.vor': 'Final images', 'gal.titel': 'The finished home, room by room', 'gal.text': 'This is how your buyer will see it before any works begin: every room, the kitchen open and closed too.', 'gal.hinweis': 'Virtual images from the model, marked as such on the portals.',
+    'gal.1': 'Open kitchen', 'gal.2': 'Kitchen closed: the joints follow the cupboards', 'gal.3': 'Inside the kitchen', 'gal.4': 'The kitchen from the dining room', 'gal.5': 'Living room', 'gal.6': 'Living room towards the terrace', 'gal.7': 'Dining room', 'gal.8': 'Sitting room', 'gal.9': 'Terrace', 'gal.10': 'Covered terrace', 'gal.11': 'Covered terrace towards the living room', 'gal.12': 'Main bedroom', 'gal.13': 'Main bedroom towards the bathroom', 'gal.14': 'Bedroom 3', 'gal.15': 'Main bathroom', 'gal.16': 'Bathroom with bath', 'gal.17': 'Small bathroom', 'gal.18': 'Entrance hall', 'gal.19': 'Corridor', 'gal.20': 'Kitchen and corridor', 'gal.21': 'The closed kitchen from the corridor', 'gal.22': 'Laundry',
     'titel': 'Amphion Estate · Sell the finished home before the works begin', 'meta': 'For agencies in Madrid: the flat that needs work is sold as the finished home, before any works begin. Your buyer walks through it in 3D, with plans and images, and sees themselves living there. In five days.',
     'nav.ejemplo': 'Example', 'nav.entrega': 'What you get', 'nav.precios': 'Prices', 'nav.fragen': 'Questions', 'nav.kontakt': 'Let’s talk',
     'held.vor': 'Madrid · Flats to renovate', 'held.titel': 'Sell the finished home, <em>before</em> the works begin.',
@@ -43,6 +45,8 @@ const TEXTE = {
     'fuss.datenschutz': 'Privacy',
   },
   de: {
+    'gal.vor': 'Endbilder', 'gal.titel': 'Die fertige Wohnung, Raum für Raum', 'gal.text': 'So sehen Käufer sie, bevor die Baustelle beginnt: jeder Raum, die Küche offen und geschlossen.', 'gal.hinweis': 'Virtuelle Bilder aus dem Modell, in den Portalen als solche gekennzeichnet.',
+    'gal.1': 'Offene Küche', 'gal.2': 'Küche geschlossen: die Fugen laufen durch', 'gal.3': 'In der Küche', 'gal.4': 'Die Küche vom Essplatz', 'gal.5': 'Salon', 'gal.6': 'Salon zur Terrasse', 'gal.7': 'Esszimmer', 'gal.8': 'Wohnzimmer', 'gal.9': 'Terrasse', 'gal.10': 'Überdachte Terrasse', 'gal.11': 'Überdachte Terrasse zum Salon', 'gal.12': 'Hauptschlafzimmer', 'gal.13': 'Schlafzimmer zum Bad', 'gal.14': 'Schlafzimmer 3', 'gal.15': 'Hauptbad', 'gal.16': 'Bad mit Wanne', 'gal.17': 'Kleines Bad', 'gal.18': 'Diele', 'gal.19': 'Flur', 'gal.20': 'Küche und Flur', 'gal.21': 'Die geschlossene Küche vom Flur', 'gal.22': 'Waschküche',
     'titel': 'Amphion Estate · Die fertige Wohnung verkaufen, bevor die Baustelle beginnt', 'meta': 'Für Maklerbüros in Madrid: Die Wohnung vor der Renovierung wird als fertiges Zuhause verkauft, bevor die Baustelle beginnt. Käufer gehen in 3D hindurch, mit Plänen und Bildern, und sehen sich darin wohnen. In fünf Tagen.',
     'nav.ejemplo': 'Beispiel', 'nav.entrega': 'Was du bekommst', 'nav.precios': 'Preise', 'nav.fragen': 'Fragen', 'nav.kontakt': 'Kontakt',
     'held.vor': 'Madrid · Wohnungen vor der Renovierung', 'held.titel': 'Die fertige Wohnung verkaufen, <em>bevor</em> die Baustelle beginnt.',

@@ -97,9 +97,19 @@ async function aufbauen() {
   // Blöcke aus dem Kataster (weiß, unser Haus türkis aus der Datei)
   const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/'), gl = new GLTFLoader().setDRACOLoader(draco);
   gl.loadAsync(mitV(basis + 'barrio.glb')).then(d => { d.scene.traverse(o => { if (o.isMesh) { o.material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }); } }); scene.add(d.scene); });
+  // Gehzonen 5, 10, 15 min als gestrichelte Linien mit Beschriftung, und „Tu casa“ über der Haustür (5.11., Tassilo: „schau, wie wir die Karte verbessern“)
+  const schild = (text, farbe, h) => { const c = document.createElement('canvas'), g = c.getContext('2d'); g.font = '600 44px system-ui, sans-serif'; c.width = Math.ceil(g.measureText(text).width) + 36; c.height = 68;
+    g.font = '600 44px system-ui, sans-serif'; g.fillStyle = 'rgba(255,255,255,.92)'; g.beginPath(); g.roundRect(0, 0, c.width, c.height, 34); g.fill(); g.fillStyle = farbe; g.textBaseline = 'middle'; g.fillText(text, 18, 36);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false, transparent: true })); sp.scale.set(h * c.width / c.height, h, 1); sp.renderOrder = 6; return sp; };
+  for (const [min, ring] of Object.entries(D.zonen || {})) {
+    const P = ring.map(([x, y]) => new THREE.Vector3(x, Y + 0.6, -y)); if (P.length < 3) continue; P.push(P[0].clone());
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(P), new THREE.LineDashedMaterial({ color: 0x00a0b4, dashSize: 10, gapSize: 7, transparent: true, opacity: 0.75 })); l.computeLineDistances(); scene.add(l);
+    const n = P.reduce((a, q) => q.z < a.z ? q : a); const s = schild(`${min} min`, '#00879a', 16 + +min); s.position.copy(n).setY(Y + 8); scene.add(s);
+  }
   // Haustür
   const tuer = new THREE.Vector3(D.tuer?.[0] ?? 0, Y, -(D.tuer?.[1] ?? 0));
   const tuerRing = new THREE.Mesh(new THREE.RingGeometry(4, 6.5, 40), new THREE.MeshBasicMaterial({ color: 0x00b4c8, transparent: true })); tuerRing.rotation.x = -Math.PI / 2; tuerRing.position.copy(tuer).setY(Y + 0.3); scene.add(tuerRing);
+  { const s = schild(TX.casa, '#00879a', 20); s.position.set(D.tuer?.[0] ?? 0, Y + 34, -(D.tuer?.[1] ?? 0)); scene.add(s); }
   const tuerPunkt = new THREE.Mesh(new THREE.CircleGeometry(3.4, 32), new THREE.MeshBasicMaterial({ color: 0x00b4c8 })); tuerPunkt.rotation.x = -Math.PI / 2; tuerPunkt.position.copy(tuer).setY(Y + 0.35); scene.add(tuerPunkt);
   // Orte: farbige Kugel auf dünnem Stiel, Weltgröße (beim Herauszoomen kleiner); je Kategorie ein InstancedMesh
   const orte = [], gruppen = {}, kugel = new THREE.SphereGeometry(1, 18, 12), stiele = [];
