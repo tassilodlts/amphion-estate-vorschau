@@ -71,6 +71,7 @@ const SAGT = {
 const sprache = () => SAGT[document.documentElement.lang] ? document.documentElement.lang : 'en';
 
 let renderer, scene, camera, controls, sichtbar = false, gestartet = false, aktiv = null, axo = false;
+const FILM_E = new URLSearchParams(location.search).get('film') === 'estate' ? { an: false } : null;   // Filmaufnahme der Wohnung (unten window.formaFilmEstate); früh, weil hausWahl und schleife sie lesen
 const loader = new GLTFLoader(), draco = new DRACOLoader(); draco.setDecoderPath(DRACO); loader.setDRACOLoader(draco);
 const SCHNITT = new THREE.MeshBasicMaterial({ color: 0x1c1c1c, side: THREE.BackSide });
 // Schnittkappen über den Stencil-Puffer (three.js-Beispiel webgl_clipping_stencil): je Körper zwei unsichtbare Durchgänge, die Rückseiten
@@ -397,12 +398,27 @@ function zeichnen() {
 // Tiefenpuffer aus der Ferne Flächen springen; nah an der Wohnung 5 cm, weit draußen bis 20 m
 function nahebene() { const m = aktiv; if (!camera?.isPerspectiveCamera || !controls) return; const z = Math.min(20, Math.max(m.nah ?? 0.05, camera.position.distanceTo(controls.target) * 0.01));
   if (Math.abs(z - camera.near) > camera.near * 0.15) { camera.near = z; camera.updateProjectionMatrix(); } }
-function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); nahebene(); tuerenBewegen(); punkteSeite(); pulseBewegen(); kachelnNeu(); const r = canvas.getBoundingClientRect(); if (r.bottom > 0 && r.top < innerHeight) zeichnen(); }   // außerhalb des Bildes nur laden, nicht zeichnen
+function schleife() { requestAnimationFrame(schleife); if (!sichtbar || !aktiv || FILM_E?.an) return; if (fahrt) fahrt(); else controls?.update(); hausWahl(); nahebene(); tuerenBewegen(); punkteSeite(); pulseBewegen(); kachelnNeu(); const r = canvas.getBoundingClientRect(); if (r.bottom > 0 && r.top < innerHeight) zeichnen(); }   // außerhalb des Bildes nur laden, nicht zeichnen
 function faltLage(o) {   // Laden k bei Faltwinkel θ = t·90° (t = 1 wie in Rhino gefaltet): Gelenkkette mit den Breiten aller Läden davor, Drehung abwechselnd; c führt zu genau auf die Rhino-Lage
   const f = o.userData.falt, th = f.t * Math.PI / 2, k = f.k, n = new THREE.Vector3(f.a.z, 0, -f.a.x).multiplyScalar(f.sg), phi = t => (k % 2 ? -f.sg : f.sg) * t;
   const W = f.vor || (f.vor = o.parent.children.filter(c => c.userData.falt && c.userData.falt.k < k).sort((p, q) => p.userData.falt.k - q.userData.falt.k).map(c => c.userData.falt.w));
   o.position.copy(f.basis); W.forEach((w, j) => { const s = j % 2 ? -1 : 1; o.position.addScaledVector(f.a, w * Math.cos(th)).addScaledVector(n, s * w * (Math.sin(th) - 1)); });
-  o.rotation.y = phi(th) - phi(Math.PI / 2); o.position.addScaledVector(f.c, 1 - f.t);
+  o.rotation.y = phi(th) - phi(Math.PI / 2) ; o.position.addScaledVector(f.c, 1 - f.t).addScaledVector(f.a, -(f.schieb || 0) * (1 - f.t));
+  o.scale.x = f.skal * (1 + (f.dehn || 0) * (1 - f.t));
+}
+// Faltläden zu richten (6.11., Tassilo: „ganz rechts war eine Fuge, die zu groß war; die Holzelemente sollen sich nicht überlappen“): zwischen Laden 4
+// und der festen Blende an der Wand blieben 1,8 cm. Der Wandladen reicht jetzt bis 3 mm an das nächste feste Teil heran (Strahl längs der Kette);
+// die Fugen zwischen den Läden (2 bis 4 mm) bleiben, nichts überlappt
+function faltRichten(m) {
+  const L = []; m.gruppen.tueren?.traverse(o => { if (o.userData.falt) L.push(o); }); if (!L.length) return null; const t0 = L.map(o => o.userData.falt.t);
+  const spanne = (o, v) => { o.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(o), P = []; for (const x of [b.min.x, b.max.x]) for (const z of [b.min.z, b.max.z]) P.push(x * v.x + z * v.z); return [Math.min(...P), Math.max(...P)]; };
+  for (const o of L) { o.userData.falt.t = 0; faltLage(o); }
+  const o0 = L.find(o => o.userData.falt.k === 0), f = o0.userData.falt, [amin, amax] = spanne(o0, f.a), b = new THREE.Box3().setFromObject(o0), c = b.getCenter(new THREE.Vector3()).sub(m.wurzel.position);
+  const P = [c.x + f.a.x * (amin - (c.x * f.a.x + c.z * f.a.z) - 0.002), c.y, c.z + f.a.z * (amin - (c.x * f.a.x + c.z * f.a.z) - 0.002)];   // knapp vor dem Wandende des Ladens, auf seiner Mittellinie
+  const ziele = []; for (const [k, g] of Object.entries(m.gruppen)) if (!['tueren', 'stadt', 'kacheln', 'fern', 'barrio'].includes(k)) g?.traverse(x => { if (x.isMesh && x.material !== SCHNITT && !x.material.transparent) ziele.push(x); });   // alle festen Teile (die Blende liegt in den Einbauten)
+  const o = new THREE.Vector3(...P).add(m.wurzel.position), d = new THREE.Raycaster(o, new THREE.Vector3(-f.a.x, 0, -f.a.z).normalize(), 0, 0.5).intersectObjects(ziele, false)[0]?.distance ?? Infinity; let dehn = 0;
+  if (d > 0.005 && d < 0.08) { dehn = d - 0.003; f.dehn = dehn / f.w; faltLage(o0); const [, amax2] = spanne(o0, f.a); if (amax2 > amax + 0.001) { f.schieb = amax2 - amax; faltLage(o0); } }
+  L.forEach((o, i) => { o.userData.falt.t = t0[i]; faltLage(o); }); return { fuge: +(Number.isFinite(d) ? d : -1).toFixed(3), dehn: +dehn.toFixed(3) };
 }
 let TUER_T = 0;
 function tuerenBewegen() { const jetzt = performance.now(), f = 1 - Math.exp(-Math.min(0.2, (jetzt - (TUER_T || jetzt)) / 1000) * 7.5); TUER_T = jetzt;   // zeitbasiert (5.11.: bei wenigen Bildern je Sekunde gingen Türen im Rundgang kaum auf)
@@ -411,7 +427,7 @@ function tuerenBewegen() { const jetzt = performance.now(), f = 1 - Math.exp(-Ma
 // unschärfer wie Google): weit weg (über m.haus.nah Meter) nur die Fotostadt mit dem Google-Haus (Knoten „eigenhaus“ der Kacheln, m.haus.ganz);
 // nah, in der Wohnung (m.haus.innen: Kasten) oder im Schnitt: Haus ohne Wohnungsgeschoss (m.haus.schnitt) und unsere Wohnung mit Fenstern
 function hausWahl() { const m = aktiv, h = m?.haus; if (!h) return; if (!h.geladen) { h.geladen = true; for (const k of h.wohnung) lade(k); }   // Wohnung schon beim Anflug laden, unsichtbar
-  const b = h.innen, p = camera.position, kasten = p.x > b[0] && p.x < b[3] && p.y > b[1] && p.y < b[4] && p.z > b[2] && p.z < b[5]; const innen = !!m.schnitt || (!!h.nah && p.length() < h.nah) || kasten;
+  const b = h.innen, p = camera.position, aus = FILM_E?.aussen, kasten = !aus && p.x > b[0] && p.x < b[3] && p.y > b[1] && p.y < b[4] && p.z > b[2] && p.z < b[5]; const innen = !aus && (!!m.schnitt || (!!h.nah && p.length() < h.nah) || kasten);   // Film: außen das Google-Haus mit Dach erzwingen
   if (!tour && camera.isPerspectiveCamera && h.fovInnen && camera.fov !== (kasten ? h.fovInnen : FOV)) { camera.fov = kasten ? h.fovInnen : FOV; camera.updateProjectionMatrix(); }   // in der Wohnung weiter Bildwinkel (4.11.: 38° wirkt in Räumen eng)
   if (innen === m.hausInnen && m.schnitt === m.hausSchnitt && kasten === m.hausKasten) return; m.hausInnen = innen; m.hausSchnitt = m.schnitt; m.hausKasten = kasten;
   for (const k of Object.keys(m.dateien)) zeige(k); for (const o of m.eigenhaus || []) o.visible = !innen;
@@ -529,7 +545,7 @@ async function lade(k) {
       if (!glas && kappenGruppe_) { const s = new THREE.Mesh(o.geometry, SCHNITT); s.frustumCulled = false; s.visible = !!m.schnitt; o.add(s); m.schnittflaechen.push(s); (m.schnittMats ||= []).push(o.material); if (m.schnitt) { o.material.side = THREE.FrontSide; o.material.needsUpdate = true; } }
     }
     d.scene.traverse(o => { if (o.parent?.userData.angel || o.parent?.userData.schub || o.parent?.userData.falt) return;   // 5.11.: Teilnetze eines Flügels mit mehreren Materialien tragen denselben Namen; sonst drehten sie doppelt (Tür 180°)
-      const fa = /^falt\|(\d+)\|(-?1)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\|(-?\d+)\|(-?\d+)/.exec(o.name); if (fa) { const a = new THREE.Vector3(+fa[5], 0, +fa[6]).normalize(); o.userData.falt = { k: +fa[1], sg: +fa[2], w: fa[3] / 1000, a, c: new THREE.Vector3(fa[7] / 1000, 0, fa[8] / 1000), basis: o.position.clone(), t: 1 }; o.scale.x = fa[4] / 1000;   /* Breite nach den Fugen der Blenden */ o.userData.ziel = 1;
+      const fa = /^falt\|(\d+)\|(-?1)\|(\d+)\|(\d+)\|(-?\d+)\|(-?\d+)\|(-?\d+)\|(-?\d+)/.exec(o.name); if (fa) { const a = new THREE.Vector3(+fa[5], 0, +fa[6]).normalize(); o.userData.falt = { k: +fa[1], sg: +fa[2], w: fa[3] / 1000, a, c: new THREE.Vector3(fa[7] / 1000, 0, fa[8] / 1000), basis: o.position.clone(), t: 1, skal: fa[4] / 1000 }; o.scale.x = fa[4] / 1000;   /* Breite nach den Fugen der Blenden */ o.userData.ziel = 1;
         o.traverse(c => { if (!c.isMesh || !c.material?.color) return; const f = c.material.color; if (f.r + f.g + f.b > 2.4 && !c.material.map) c.userData.faltWeiss = true; });   // weiße Lackseite (Prüfregel: zu nur zur Küche)
         return; }   // Faltladen: wie gezeichnet gefaltet (Küche offen)
       const kl = /^klappe\|([xz])\|(-?\d+)\|(\d+)/.exec(o.name); if (kl) { const h = kl[3] / 1000; o.position.y += h; if (o.isMesh) o.geometry.translate(0, -h, 0); else for (const c of o.children) c.position.y -= h; o.userData.angel = { offen: kl[2] * Math.PI / 180, zu: 0, achse: kl[1] }; o.userData.ziel = 0; return; }   // Geschirrspüler, Backofen: Drehachse an der Unterkante
@@ -538,6 +554,7 @@ async function lade(k) {
     if (k === 'tueren') { const T = []; d.scene.traverse(o => { if (o.userData.angel || o.userData.schub || o.userData.falt?.k === 0) T.push(o); }); for (const o of T) { const r = o.rotation.y; o.rotation.y = 0; tuerPunkte(o); o.rotation.y = r; } }   // Türpunkte im Ruhezustand des Blatts messen
     if (k === 'spiegel') spiegelBauen(m, netze);   // 4.11. (Tassilo): Türen immer offen   // Türflügel (tools/stadt_tueren.mjs): Drehpunkt = Angel
     g.add(d.scene); g.visible = m === aktiv ? sollSichtbar(k) : true;
+    if (!m.faltGerichtet && ['tueren', 'einbauten', 'architektur'].every(x => m.gruppen[x]?.children.length)) { m.faltGerichtet = faltRichten(m) || true; if (FILM_E) FILM_E.falt = m.faltGerichtet; }   // Faltläden flach und dicht an die Blende
     if (m.versatz?.[k]) g.position.set(...m.versatz[k]);   // z. B. Stadt: Straßenniveau unter dem Wohnungsgeschoss
     if (m.ebenen?.length) clipSetzen(m);   // nachgeladene Gruppe in den laufenden Schnitt
     if (m.haus?.wohnung.includes(k)) m.hausSchnitt = undefined;   // Wohnungsteil nachgeladen: hausWahl setzt Sichtbarkeit und Deckenschnitt neu
@@ -695,6 +712,7 @@ window.formaZustand.treffer = (pos, ziel) => { const o = new THREE.Vector3(...po
 window.formaZustand.tour = () => tour ? { halt: tour.i, marken: tourPfeilListe().length, laeuft: !!tour.laeuft, leiste: !!wrap.querySelector('.m-tour'), raum: tour.schild?.querySelector('b')?.textContent, fov: camera.fov } : null;
 window.formaZustand.tuerenOffen = () => { let n = 0; aktiv.gruppen.tueren?.traverse(o => { const A = o.userData.angel; if (A && Math.abs(o.rotation.y - A.offen) < 0.05 && Math.abs(A.offen - A.zu) > 1) n++; }); return n; };
 window.formaZustand.schubWege = () => { const L = []; for (const k of ['tueren', 'fenster']) aktiv.gruppen[k]?.traverse(o => { if (o.userData.schub) L.push(+o.userData.schub.d.length().toFixed(3)); }); return L; };   // Prüfregel: Schiebewege zwischen 0,3 und 3 m
+window.formaZustand.schubDeckt = () => { const L = []; aktiv.gruppen.tueren?.traverse(o => { const S = o.userData.schub; if (!S) return; const b = new THREE.Box3().setFromObject(o), g = b.max.clone().sub(b.min), d = S.d.clone().normalize(); L.push([+S.d.length().toFixed(3), +Math.abs(g.dot(new THREE.Vector3(Math.abs(d.x), Math.abs(d.y), Math.abs(d.z)))).toFixed(3)]); }); return L; };   // Prüfregel: [Weg, Blattlänge längs des Wegs]
 // faltWeiss (Prüfregel, 5.11.): Läden zu, Strahl auf den Laden am Riegel von der Küche (−x) und vom Salon (+x): innen weißer Lack, außen Holz
 window.formaZustand.faltWeiss = () => { const L = []; aktiv.gruppen.tueren?.traverse(o => { if (o.userData.falt) L.push(o); }); const t0 = L.map(o => o.userData.falt.t); L.forEach(o => { o.userData.falt.t = 0; faltLage(o); o.updateMatrixWorld(true); });
   const o = L.find(o => o.userData.falt.k === L.length - 1), c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3()), seite = sx => { const r = new THREE.Raycaster(c.clone().add(new THREE.Vector3(sx * 0.6, 0.15, 0)), new THREE.Vector3(-sx, 0, 0)); r.camera = camera; const h = r.intersectObjects(L, true).find(h => h.object.isMesh && !h.object.userData.tuerPunkt); return h ? (h.object.material.map ? 'holz' : '#' + h.object.material.color.getHexString()) : null; };
@@ -914,6 +932,60 @@ if (SR && mikro && eingabe) {
 // Erst laden, wenn der Abschnitt ins Bild kommt; nur rendern, solange er sichtbar ist
 new IntersectionObserver(es => { for (const e of es) { sichtbar = e.isIntersecting; if (sichtbar) start(); } }, { rootMargin: '1200px' }).observe(wrap);   // früh laden (5.11.: die Stadt war beim Ankommen noch nicht da); der Anflug wartet trotzdem auf die Bühne
 
+// Film der Wohnung (?film=estate, 5.11., Tassilo: „ein KI-Video, wie man von Madrid weit weg reinfliegt, durch die Terrasse in die Wohnung geht, durch
+// die ganze Wohnung“): Grundfilm ohne KI, Bild für Bild aus tools/estate_film.mjs. kamera() setzt den Blick, bild() wartet, bis alle Kacheln dieser
+// Ansicht da sind, und gibt das Bild als JPEG (Farbe) oder als Tiefenbild (hell = nah, logarithmisch bis 3 km) für KI-Werkzeuge mit Tiefensteuerung
+const himmelAnteil = () => { const c = FILM_E.klein ||= Object.assign(document.createElement('canvas'), { width: 48, height: 27 }), x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(canvas, 0, 0, 48, 27); const d = x.getImageData(0, 0, 48, 27).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - 201) < 14 && Math.abs(d[i + 1] - 214) < 14 && Math.abs(d[i + 2] - 223) < 14) n++; return n / (d.length / 4); };   // Anteil Himmelfarbe (0xc9d6df)
+if (FILM_E) window.formaFilmEstate = {
+  vorbereiten: async (px, py) => {
+    canvas.style.width = px + 'px'; canvas.style.height = py + 'px'; const b = wrap.querySelector('.m-buehne'); b.style.width = px + 'px'; b.style.height = py + 'px'; b.style.maxWidth = 'none';
+    if (FILM_E.dateien) for (const m of Object.values(MODELLE)) for (const [k, d] of Object.entries(FILM_E.dateien)) if (m.dateien?.[k]) { m.dateien[k] = d; if (m.dateienLeicht) delete m.dateienLeicht[k]; }   // Film: eigene Dateien (ohne Wandleuchten im Salón, Büro leer)
+    sichtbar = true; start(); while (!aktiv) await new Promise(r => setTimeout(r, 200));
+    const m = aktiv; FILM_E.an = true; fahrt = null; renderer.setPixelRatio(1); groesse(); NACH = null; m.angetippt = true;
+    for (const k of Object.keys(FILM_E.dateien || {})) if (m.gruppen[k]) { m.gruppen[k].parent?.remove(m.gruppen[k]); delete m.gruppen[k]; }   // schon mit der normalen Datei geladen: neu mit der Filmdatei
+    const K = Object.keys(m.dateien).filter(k => k !== 'barrio'); for (const k of K) if (!m.gruppen[k]) lade(k);
+    while (K.some(k => !m.gruppen[k]?.children.length) || !m.tiles) await new Promise(r => setTimeout(r, 300));
+    if (m.schnitt && m.schnitt !== 'kein') schnitt('kein');
+    m.tiles.lruCache.maxBytesSize = 2.2e9; m.tiles.lruCache.maxSize = 30000;   // 5.11.: mit 430 MB lief der Speicher voll und keine Kachel wurde sichtbar (nur Himmel)
+    // Zimmertüren offen, Schiebetür offen, Faltläden und alle Fenster zu (6.11., Tassilo: „die Fenster sollen bitte alle geschlossen sein“); zu (Liste [x, z]) bleibt zu
+    const lage = o => o.getWorldPosition(new THREE.Vector3()).sub(m.wurzel.position), bleibtZu = FILM_E.zu || [];
+    for (const k of ['tueren', 'fenster']) m.gruppen[k]?.traverse(o => { const A = o.userData.angel, S = o.userData.schub, Fa = o.userData.falt, c = (A || S) && lage(o), zu = k === 'fenster' || (c && bleibtZu.some(([x, z]) => Math.hypot(c.x - x, c.z - z) < 0.25));
+      if (A) { o.rotation[A.achse || 'y'] = o.userData.ziel = zu ? A.zu : A.offen; } else if (S) { S.t = o.userData.t = o.userData.ziel = 0; o.position.copy(S.basis).addScaledVector(S.d, 0); }   /* Schiebeteile wie gezeichnet: Schiebetür in der Tasche (offen), Glaswand zu */ else if (Fa) { Fa.t = o.userData.ziel = 0; faltLage(o); } });
+    scene.traverse(o => { if (o.userData.tuerPunkt) o.visible = false; });   // keine Türpunkte im Film
+    const himmel = new THREE.Color(0xc9d6df); scene.background = himmel; scene.fog = new THREE.Fog(himmel, 1300, 3800);   // Rand der geladenen Stadt verschwindet im Dunst
+    return { px: canvas.width, py: canvas.height };
+  },
+  kamera: (pos, ziel, fov) => { camera.position.set(...pos); controls.target.set(...ziel); camera.lookAt(controls.target); hausWahl(); if (fov) camera.fov = fov; camera.updateProjectionMatrix(); nahebene(); camera.updateMatrixWorld(); },
+  bild: async (art = 'farbe', q = 0.95, fehler = 2) => {
+    const t = aktiv.tiles; let ruhig = 0;   // ruhig erst, wenn die Kacheldatei da ist, Kacheln sichtbar sind und nichts mehr lädt
+    if (t && t.group.parent?.visible) for (let k = 0; k < 600 && ruhig < 3; k++) { t.errorTarget = fehler; if (t.kamera !== camera) { if (t.kamera) t.deleteCamera(t.kamera); t.setCamera(camera); t.kamera = camera; } t.setResolutionFromRenderer(camera, renderer); t.update(); const S = t.stats; ruhig = S.queued + S.downloading + S.parsing || !t.root || !t.visibleTiles?.size ? 0 : ruhig + 1; await new Promise(r => setTimeout(r, ruhig ? 15 : 60)); }
+    if (art === 'tiefe') { const alt = scene.background; FILM_E.tiefe ||= new THREE.ShaderMaterial({ vertexShader: 'varying float d; void main(){ vec4 v = modelViewMatrix * vec4(position, 1.0); d = -v.z; gl_Position = projectionMatrix * v; }', fragmentShader: 'varying float d; void main(){ float g = 1.0 - log(1.0 + max(d, 0.0)) / log(3001.0); gl_FragColor = vec4(vec3(g), 1.0); }', side: THREE.DoubleSide });
+      scene.overrideMaterial = FILM_E.tiefe; scene.background = new THREE.Color(0); renderer.render(scene, camera); scene.overrideMaterial = null; scene.background = alt; return canvas.toDataURL('image/png'); }
+    zeichnen();
+    if (FILM_E.stadtPflicht) for (let n = 0; n < 40 && himmelAnteil() > 0.8; n++) { await new Promise(r => setTimeout(r, 500)); t?.update(); zeichnen(); }   // Luftbild nur aus Himmel: Kacheln noch nicht da, nachladen
+    return canvas.toDataURL('image/jpeg', q);
+  },
+  stadtPflicht: an => { FILM_E.stadtPflicht = an; },
+  zuLassen: L => { FILM_E.zu = L; },
+  dateien: D => { FILM_E.dateien = D; },
+  schnitt: name => { if ((aktiv.schnitt || 'kein') !== name) schnitt(name); },   // Film: 'planta' = ohne Decke
+  versteckeBereich: (k, x0, x1, z0, z1) => { let n = 0; aktiv.gruppen[k]?.traverse(o => { if (!o.isMesh || !o.visible) return; const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3()).sub(aktiv.wurzel.position); if (c.x > x0 && c.x < x1 && c.z > z0 && c.z < z1) { o.visible = false; n++; } }); return n; },
+  faltBericht: () => FILM_E.falt,
+  faltKaesten: t => { const L = []; aktiv.gruppen.tueren?.traverse(o => { const f = o.userData.falt; if (!f) return; if (t != null) { f.t = t; faltLage(o); } o.updateMatrixWorld(true); const b = new THREE.Box3().setFromObject(o), w = aktiv.wurzel.position; L.push([f.k, +(b.min.x - w.x).toFixed(3), +(b.max.x - w.x).toFixed(3), +(b.min.z - w.z).toFixed(3), +(b.max.z - w.z).toFixed(3)]); }); return L.sort((a, b) => a[3] - b[3]); },   // Prüfung: Lage der Faltläden
+  tuerenFrei: (L, auslassen = []) => { const fl = []; aktiv.gruppen.tueren?.traverse(o => { const A = o.userData.angel; if (!A || A.achse) return; const c = o.getWorldPosition(new THREE.Vector3()).sub(aktiv.wurzel.position); if (auslassen.some(([x, z]) => Math.hypot(c.x - x, c.z - z) < 0.3)) return;   // Film: Türen, die den Weg versperren, auf eine freie Stellung (offen, zu, ±90°)
+      const netze = []; o.traverse(m => { if (m.isMesh) netze.push(m); }); const sperrt = () => { o.updateMatrixWorld(true); return L.some(([a, b]) => { const p = new THREE.Vector3(...a).add(aktiv.wurzel.position), d = new THREE.Vector3(...b).add(aktiv.wurzel.position).sub(p), l = d.length(); return l > 1e-3 && new THREE.Raycaster(p, d.normalize(), 0, l).intersectObjects(netze, false).length; }); };
+      if (!sperrt()) return; const r0 = o.rotation.y; for (const r of [A.offen, A.zu, ...[90, -90, 105, -105, 75, -75, 120, -120].map(g => A.zu + g * Math.PI / 180)]) { o.rotation.y = r; if (!sperrt()) { o.userData.ziel = r; fl.push([o.name, +c.x.toFixed(2), +c.z.toFixed(2), +(r * 180 / Math.PI).toFixed(0)]); return; } } o.rotation.y = r0; fl.push([o.name, +c.x.toFixed(2), +c.z.toFixed(2), 'sperrt']); }); return fl; },
+  tuerImWeg: (a, b) => { const o = new THREE.Vector3(...a), d = new THREE.Vector3(...b).sub(o), l = d.length(); if (l < 1e-4) return null; const ziele = []; aktiv.gruppen.tueren?.traverse(x => { if (x.isMesh && x.visible && x.material !== SCHNITT) ziele.push(x); });   // Prüfregel: fährt die Kamera durch eine geschlossene Tür?
+    const h = new THREE.Raycaster(o, d.normalize(), 0, l).intersectObjects(ziele, false)[0]; return h ? h.point.clone().sub(aktiv.wurzel.position).toArray().map(v => +v.toFixed(2)) : null; },   // vor vorbereiten: { moebel: 'moebel_film.glb', … }   // vor vorbereiten: Türen an diesen Angeln [x, z] bleiben zu (Wohnungstür, Küchentür, Glaswand der Terrasse)
+  bewege: (x, z, t, r = 0.3) => { let n = 0; for (const k of ['tueren']) aktiv.gruppen[k]?.traverse(o => {   // nur Türen (6.11.: mit Schränken bewegte die Küchentür die Kühlschrankblende, die Schiebetür den Hochschrank mit)
+    const A = o.userData.angel, S = o.userData.schub; if (!A && !S) return; const c = (S ? o.parent.localToWorld(S.basis.clone()) : o.getWorldPosition(new THREE.Vector3())).sub(aktiv.wurzel.position); if   /* 6.11.: Schiebetür an ihrer Grundlage suchen, sonst blieb sie nach 0,3 m Weg stehen (fand sich nicht mehr) */ (Math.hypot(c.x - x, c.z - z) > r) return; n++;
+    if (A) o.rotation[A.achse || 'y'] = o.userData.ziel = A.zu + (A.offen - A.zu) * t; else { S.t = o.userData.t = o.userData.ziel = t; o.position.copy(S.basis).addScaledVector(S.d, t); } }); return n; },   // Tür oder Schiebetür an der Angel (x, z) auf Anteil t
+  aussen: an => { FILM_E.aussen = an; },
+  falt: t => { aktiv.gruppen.tueren?.traverse(o => { const Fa = o.userData.falt; if (Fa) { Fa.t = o.userData.ziel = t; faltLage(o); } }); },   // Faltläden der Küche: 0 zu, 1 offen
+  debug: () => { const t = aktiv.tiles; return { stats: { ...t.stats }, sichtbar: t.visibleTiles.size, aktiv: t.activeTiles.size, cache: t.lruCache.itemSet?.size, max: t.lruCache.maxSize, maxBytes: t.lruCache.maxBytesSize, gruppe: t.group.visible, eltern: t.group.parent?.visible, err: t.errorTarget, himmel: himmelAnteil() }; },
+  strahl: (pos, ziel) => strahl(pos, ziel),
+  wege: () => ({ halte: aktiv.rundgang, wege: aktiv.rundgangWege?.wege }),
+};
 // Film (?film=1, nur für die Aufnahme mit out/film_tmp.mjs). Endlosschleife (2.11., Tassilo: „fängt an, wo es aufhört“, die ganze Stadt soll
 // auftreten, keine gepunktete Linie): Die Kamera fährt in F.dauer Sekunden genau einmal um den Turm. Am Anfang und am Ende steht der Turm allein
 // auf weißer Scheibe wie im Fenster der App. Dazwischen wächst die Stadt von innen nach außen, erst die Fotokacheln, dann die ganze gebaute
